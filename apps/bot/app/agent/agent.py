@@ -3,6 +3,7 @@
 import logging
 import os
 
+from langgraph.checkpoint.memory import MemorySaver
 from langgraph.prebuilt import create_react_agent
 
 from apps.bot.app.agent.tools import get_all_tools
@@ -12,6 +13,30 @@ from apps.bot.app.services.settings_service import get_llm_model, get_llm_provid
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
+
+# Shared checkpointer instance — one per bot process
+checkpointer = MemorySaver()
+
+# Track per-user thread reset counters
+_user_reset_counters: dict[int, int] = {}
+
+
+def get_thread_id(user_tg_id: int) -> str:
+    """Get the current LangGraph thread_id for a user.
+
+    Returns a stable or reset-aware thread_id based on tg_id.
+    """
+    counter = _user_reset_counters.get(user_tg_id, 0)
+    if counter == 0:
+        return str(user_tg_id)
+    return f"{user_tg_id}_{counter}"
+
+
+def reset_user_thread(user_tg_id: int) -> None:
+    """Increment the thread counter for a user, effectively starting a fresh conversation."""
+    current = _user_reset_counters.get(user_tg_id, 0)
+    _user_reset_counters[user_tg_id] = current + 1
+    logger.info(f"User {user_tg_id} conversation reset (counter={current + 1})")
 
 
 async def create_agent(system_prompt: str, trace_id: str, prompt_meta: dict):
@@ -59,6 +84,7 @@ async def create_agent(system_prompt: str, trace_id: str, prompt_meta: dict):
         llm,
         tools=tools,
         prompt=system_prompt,
+        checkpointer=checkpointer,
     )
 
     # Configure LangSmith tracing

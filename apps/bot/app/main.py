@@ -8,7 +8,7 @@ from aiogram.enums import ParseMode
 from fastapi import FastAPI
 
 from apps.bot.app.config import get_settings
-from apps.bot.app.handlers import admin, message, start, voice
+from apps.bot.app.handlers import admin, message, restart, start, voice
 from apps.bot.app.services.admin_service import bootstrap_root_admin
 from apps.bot.app.services.seed_service import seed_defaults
 from packages.shared.utils.logging import setup_logging
@@ -27,6 +27,7 @@ dp = Dispatcher()
 # Register handlers
 dp.include_router(start.router)
 dp.include_router(admin.router)
+dp.include_router(restart.router)
 dp.include_router(voice.router)
 dp.include_router(message.router)  # message handler last (catch-all)
 

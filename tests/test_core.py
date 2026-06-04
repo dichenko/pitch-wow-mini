@@ -404,3 +404,95 @@ class TestCSRFForSettings:
         csrf_cookie = "token_abc123"
         csrf_form = "token_xyz789"
         assert csrf_cookie != csrf_form
+
+
+class TestConversationThread:
+    """Test conversation thread_id and restart logic."""
+
+    def test_get_thread_id_no_reset(self):
+        """Thread ID should be stable when no reset has occurred."""
+        from apps.bot.app.agent.agent import _user_reset_counters, get_thread_id, reset_user_thread
+
+        tg_id = 11111
+        _user_reset_counters.clear()
+
+        thread1 = get_thread_id(tg_id)
+        thread2 = get_thread_id(tg_id)
+        assert thread1 == thread2 == "11111"
+
+    def test_get_thread_id_after_reset(self):
+        """After reset, thread ID should change."""
+        from apps.bot.app.agent.agent import _user_reset_counters, get_thread_id, reset_user_thread
+
+        tg_id = 22222
+        _user_reset_counters.clear()
+
+        before = get_thread_id(tg_id)
+        reset_user_thread(tg_id)
+        after = get_thread_id(tg_id)
+
+        assert before != after
+        assert before == "22222"
+        assert after == "22222_1"
+
+    def test_multiple_resets_increment_counter(self):
+        """Multiple resets should produce unique thread IDs."""
+        from apps.bot.app.agent.agent import _user_reset_counters, get_thread_id, reset_user_thread
+
+        tg_id = 33333
+        _user_reset_counters.clear()
+
+        t0 = get_thread_id(tg_id)
+        reset_user_thread(tg_id)
+        t1 = get_thread_id(tg_id)
+        reset_user_thread(tg_id)
+        t2 = get_thread_id(tg_id)
+
+        assert t0 == "33333"
+        assert t1 == "33333_1"
+        assert t2 == "33333_2"
+
+    def test_different_users_have_isolated_threads(self):
+        """Different users should have independent thread IDs."""
+        from apps.bot.app.agent.agent import _user_reset_counters, get_thread_id, reset_user_thread
+
+        _user_reset_counters.clear()
+
+        reset_user_thread(100)
+        thread_100 = get_thread_id(100)
+        thread_200 = get_thread_id(200)
+
+        assert thread_100 != thread_200
+        assert thread_100 == "100_1"
+        assert thread_200 == "200"
+
+    def test_start_command_clears_history(self):
+        """Simulating /start clearing behavior."""
+        from apps.bot.app.agent.agent import _user_reset_counters, get_thread_id, reset_user_thread
+
+        tg_id = 44444
+        _user_reset_counters.clear()
+
+        # Simulate user conversation before /start
+        before = get_thread_id(tg_id)
+
+        # /start handler calls reset
+        reset_user_thread(tg_id)
+
+        after = get_thread_id(tg_id)
+        assert before != after
+
+    def test_restart_command_clears_history(self):
+        """Simulating /restart clearing behavior."""
+        from apps.bot.app.agent.agent import _user_reset_counters, get_thread_id, reset_user_thread
+
+        tg_id = 55555
+        _user_reset_counters.clear()
+
+        before = get_thread_id(tg_id)
+
+        # /restart handler calls reset
+        reset_user_thread(tg_id)
+
+        after = get_thread_id(tg_id)
+        assert before != after

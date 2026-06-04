@@ -9,7 +9,7 @@ from aiogram.filters import Command
 from aiogram.types import Message
 from langchain_core.messages import ToolMessage
 
-from apps.bot.app.agent.agent import create_agent
+from apps.bot.app.agent.agent import create_agent, get_thread_id
 from apps.bot.app.agent.prompt_assembler import assemble_prompt
 from apps.bot.app.agent.tools.send_to_admin import set_tool_context
 from apps.bot.app.config import get_settings
@@ -21,13 +21,14 @@ router = Router()
 settings = get_settings()
 
 
-@router.message(~Command("start", "admin"))
+@router.message(~Command("start", "admin", "restart"))
 async def handle_message(message: Message) -> None:
     if not message.from_user or not message.text:
         return
 
     trace_id = str(uuid.uuid4())
     user = message.from_user
+    thread_id = get_thread_id(user.id)
 
     # Set tool context so tools can access user data
     set_tool_context(
@@ -50,7 +51,7 @@ async def handle_message(message: Message) -> None:
         prompt_meta["telegram_username"] = user.username or ""
 
         # Create agent
-        agent = create_agent(
+        agent = await create_agent(
             system_prompt=system_prompt, trace_id=trace_id, prompt_meta=prompt_meta
         )
 
@@ -58,7 +59,7 @@ async def handle_message(message: Message) -> None:
         config = {
             "metadata": getattr(agent, "metadata", {}),
             "tags": getattr(agent, "tags", []),
-            "configurable": {"thread_id": trace_id},
+            "configurable": {"thread_id": thread_id},
         }
 
         # Invoke agent with config
@@ -74,7 +75,7 @@ async def handle_message(message: Message) -> None:
                     trace_id=trace_id,
                     user_tg_id=user.id,
                     tool_name=msg.name or "unknown",
-                    tool_input=None,  # ToolMessage doesn't carry input
+                    tool_input=None,
                     tool_output=str(msg.content)[:1000],
                     status="success",
                 )
@@ -93,7 +94,7 @@ async def handle_message(message: Message) -> None:
         )
 
         await message.answer(final_response)
-        logger.info(f"Message processed trace_id={trace_id} user_tg_id={user.id}")
+        logger.info(f"Message processed trace_id={trace_id} thread_id={thread_id} user_tg_id={user.id}")
 
     except Exception as e:
         logger.error(f"Agent error trace_id={trace_id}: {e}", exc_info=True)
