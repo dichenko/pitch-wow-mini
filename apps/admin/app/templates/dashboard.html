@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<h1>Dashboard</h1>
+<div class="card">
+    <h3>Welcome</h3>
+    <p>You are logged in as admin with role: <strong>{{ admin.role }}</strong></p>
+    <p>Use the sidebar to manage system prompts, tools instruction, censor settings, and administrators.</p>
+</div>
+<div class="card">
+    <h3>Quick Links</h3>
+    <ul>
+        <li><a href="/admin/system-prompt">System Prompt</a> — Edit the system prompt sent to the LLM</li>
+        <li><a href="/admin/tools-instruction">Tools Instruction</a> — Edit tool usage instructions</li>
+        <li><a href="/admin/censor">Censor</a> — Configure response reviewer</li>
+        <li><a href="/admin/admins">Administrators</a> — Manage admin accounts</li>
+        <li><a href="/admin/debug">Debug</a> — System status and diagnostics</li>
+    </ul>
+</div>
+{% endblock %}

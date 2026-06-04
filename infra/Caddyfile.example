@@ -1,0 +1,21 @@
+# Caddyfile.example
+#
+# This is a template for host-level Caddy reverse proxy configuration.
+# Caddy runs ONCE globally on the host server, not inside Docker Compose.
+#
+# Installation:
+#   https://caddyserver.com/docs/install
+#
+# Usage:
+#   1. Copy this file to /etc/caddy/Caddyfile (or your Caddy config path)
+#   2. Replace domain names with your actual domains
+#   3. Replace port numbers with your project's BOT_HOST_PORT and ADMIN_HOST_PORT
+#   4. Reload Caddy: caddy reload --config /etc/caddy/Caddyfile
+
+bot.example.com {
+    reverse_proxy 127.0.0.1:18001
+}
+
+admin.example.com {
+    reverse_proxy 127.0.0.1:18002
+}

@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Settings{% endblock %}
+{% block content %}
+<h1>Settings</h1>
+
+{% if success %}
+<div style="background: #d4edda; border: 1px solid #c3e6cb; padding: 12px; border-radius: 4px; margin-bottom: 16px; color: #155724;">
+    {{ success }}
+</div>
+{% endif %}
+
+{% if error %}
+<div style="background: #f8d7da; border: 1px solid #f5c6cb; padding: 12px; border-radius: 4px; margin-bottom: 16px; color: #721c24;">
+    {{ error }}
+</div>
+{% endif %}
+
+<div class="card">
+    <h3>Main Agent LLM</h3>
+    <form method="POST" action="/admin/settings/save" style="display: contents;">
+        <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token', '') }}">
+        <div class="form-group">
+            <label>Provider</label>
+            <select name="llm_provider">
+                <option value="openai" {% if llm_provider == "openai" %}selected{% endif %}>OpenAI</option>
+                <option value="anthropic" {% if llm_provider == "anthropic" %}selected{% endif %}>Anthropic Claude</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Model</label>
+            <input type="text" name="llm_model" value="{{ llm_model }}" />
+        </div>
+</div>
+
+<div class="card">
+    <h3>Censor / Response Reviewer LLM</h3>
+        <div class="form-group">
+            <label>Provider</label>
+            <select name="censor_provider">
+                <option value="openai" {% if censor_provider == "openai" %}selected{% endif %}>OpenAI</option>
+                <option value="anthropic" {% if censor_provider == "anthropic" %}selected{% endif %}>Anthropic Claude</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Model</label>
+            <input type="text" name="censor_model" value="{{ censor_model }}" />
+        </div>
+</div>
+
+<div style="margin-top: 20px;">
+    {% if admin.role != "read" %}
+    <button type="submit" class="btn">Save Settings</button>
+    {% endif %}
+</div>
+    </form>
+{% endblock %}

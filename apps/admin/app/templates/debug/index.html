@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Debug{% endblock %}
+{% block content %}
+<h1>Debug</h1>
+<div class="card">
+    <h3>Application</h3>
+    <table>
+        <tr><td>Environment</td><td>{{ debug.app_env }}</td></tr>
+        <tr><td>Project Slug</td><td>{{ debug.project_slug }}</td></tr>
+        <tr><td>LLM Provider</td><td>{{ debug.text_llm_provider }}</td></tr>
+        <tr><td>LLM Model</td><td>{{ debug.openai_text_model }}</td></tr>
+        <tr><td>Bot Mode</td><td>{{ debug.bot_mode }}</td></tr>
+        <tr><td>Database</td><td>{{ debug.db_status }}</td></tr>
+    </table>
+</div>
+<div class="card">
+    <h3>Active Prompt Versions</h3>
+    <table>
+        <tr><td>System Prompt</td><td>v{{ debug.system_prompt_version }}</td></tr>
+        <tr><td>Tools Instruction</td><td>v{{ debug.tools_instruction_version }}</td></tr>
+        <tr><td>Censor Prompt</td><td>v{{ debug.censor_prompt_version }}</td></tr>
+    </table>
+</div>
+<div class="card">
+    <h3>LangSmith</h3>
+    <table>
+        <tr><td>Tracing</td><td>{{ 'Enabled' if debug.langsmith_tracing else 'Disabled' }}</td></tr>
+        <tr><td>Project</td><td>{{ debug.langsmith_project }}</td></tr>
+        <tr><td>Endpoint</td><td>{{ debug.langsmith_endpoint }}</td></tr>
+        <tr><td>Workspace Configured</td><td>{{ 'Yes' if debug.langsmith_workspace_configured else 'No' }}</td></tr>
+    </table>
+</div>
+<div class="card">
+    <h3>Censor</h3>
+    <table>
+        <tr><td>Enabled</td><td>{{ 'Yes' if debug.censor_enabled else 'No' }}</td></tr>
+        <tr><td>Last Run</td><td>{{ debug.last_censor_run_at or 'Never' }}</td></tr>
+        <tr><td>Last Run Status</td><td>{{ debug.last_censor_run_status or 'N/A' }}</td></tr>
+    </table>
+</div>
+<div class="card">
+    <h3>send_to_admin</h3>
+    <table>
+        <tr><td>ADMIN_TELEGRAM_CHAT_ID Configured</td><td>{{ 'Yes' if debug.admin_telegram_chat_configured else 'No' }}</td></tr>
+        <tr><td>Last Notification</td><td>{{ debug.last_notification_at or 'Never' }}</td></tr>
+    </table>
+</div>
+{% endblock %}

@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Administrators{% endblock %}
+{% block content %}
+<h1>Administrators</h1>
+
+{% if admin.role == 'superadmin' %}
+<div class="card">
+    <h3>Add Administrator</h3>
+    <form method="POST" action="/admin/admins/add">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+            <div class="form-group">
+                <label>Telegram ID</label>
+                <input type="number" name="tg_id" required>
+            </div>
+            <div class="form-group">
+                <label>Username (optional)</label>
+                <input type="text" name="username">
+            </div>
+            <div class="form-group">
+                <label>Display Name (optional)</label>
+                <input type="text" name="display_name">
+            </div>
+            <div class="form-group">
+                <label>Role</label>
+                <select name="role">
+                    <option value="read">Read</option>
+                    <option value="write">Write</option>
+                    <option value="superadmin">Superadmin</option>
+                </select>
+            </div>
+        </div>
+        <button type="submit" class="btn">Add Admin</button>
+    </form>
+</div>
+{% endif %}
+
+<div class="card">
+    <h3>Admin List</h3>
+    <table>
+        <thead><tr><th>TG ID</th><th>Username</th><th>Display Name</th><th>Role</th><th>Status</th><th>Created</th>{% if admin.role == 'superadmin' %}<th>Actions</th>{% endif %}</tr></thead>
+        <tbody>
+        {% for a in admins_list %}
+        <tr>
+            <td>{{ a.tg_id }}</td>
+            <td>{{ a.username or '—' }}</td>
+            <td>{{ a.display_name or '—' }}</td>
+            <td>{{ a.role }}</td>
+            <td>{{ 'Active' if a.is_active else 'Inactive' }}</td>
+            <td>{{ a.created_at.strftime('%Y-%m-%d') if a.created_at else '—' }}</td>
+            {% if admin.role == 'superadmin' %}
+            <td>
+                {% if a.tg_id != root_tg_id and a.is_active %}
+                <form method="POST" action="/admin/admins/deactivate/{{ a.id }}" style="display: inline;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Deactivate this admin?')">Deactivate</button>
+                </form>
+                <form method="POST" action="/admin/admins/change-role/{{ a.id }}" style="display: inline;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <select name="role" onchange="this.form.submit()" style="padding: 4px;">
+                        <option value="read" {% if a.role == 'read' %}selected{% endif %}>Read</option>
+                        <option value="write" {% if a.role == 'write' %}selected{% endif %}>Write</option>
+                        <option value="superadmin" {% if a.role == 'superadmin' %}selected{% endif %}>Superadmin</option>
+                    </select>
+                </form>
+                {% elif a.tg_id == root_tg_id %}
+                <em>Root admin</em>
+                {% endif %}
+            </td>
+            {% endif %}
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

@@ -1,0 +1,33 @@
+# Project Knowledge Base
+# This file contains domain-specific information for the AI assistant.
+# Customize this file for your specific project/organization.
+
+## About the Organization
+- Organization name: Your Organization Name
+- Industry: Your Industry
+- Website: https://example.com
+
+## Services
+- Service 1: Description of service 1
+- Service 2: Description of service 2
+- Service 3: Description of service 3
+
+## Working Hours
+- Monday to Friday: 9:00 - 18:00
+- Saturday: 10:00 - 15:00
+- Sunday: Closed
+
+## Contact Information
+- Phone: +1 234 567 890
+- Email: info@example.com
+- Address: 123 Main Street, City, Country
+
+## Frequently Asked Questions
+Q: How do I make an appointment?
+A: You can make an appointment by contacting us via phone or email.
+
+Q: What are your prices?
+A: Please contact us for a personalized quote.
+
+Q: Do you offer consultations?
+A: Yes, we offer free initial consultations. Contact us to schedule one.

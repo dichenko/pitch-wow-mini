@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<h1>{{ title }}</h1>
+<div class="card">
+    <h3>Active Version {% if active %}(v{{ active.version_number }}){% endif %}</h3>
+    {% if active %}
+    <p class="version-meta">Saved by {{ active.created_by_username or 'system' }} on {{ active.created_at.strftime('%Y-%m-%d %H:%M') if active.created_at else 'N/A' }}</p>
+    {% endif %}
+    {% if admin.role in ('write', 'superadmin') %}
+    <form method="POST" action="{{ page_url }}/save">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <div class="form-group">
+            <textarea name="content">{{ active.content if active else '' }}</textarea>
+        </div>
+        <div class="form-group">
+            <label>Change note (optional)</label>
+            <input type="text" name="change_note" style="width: 100%;" placeholder="What changed?">
+        </div>
+        <button type="submit" class="btn">Save New Version</button>
+    </form>
+    {% else %}
+    <div class="form-group">
+        <textarea readonly>{{ active.content if active else 'No active version' }}</textarea>
+    </div>
+    <p><em>Read-only access. Only write and superadmin roles can edit.</em></p>
+    {% endif %}
+</div>
+
+{% if versions %}
+<div class="card">
+    <h3>Version History</h3>
+    <div class="version-list">
+        {% for v in versions %}
+        {% if not v.is_active %}
+        <div class="version-item">
+            <div>
+                <strong>v{{ v.version_number }}</strong>
+                <span class="version-meta">by {{ v.created_by_username or 'system' }} on {{ v.created_at.strftime('%Y-%m-%d %H:%M') if v.created_at else 'N/A' }}</span>
+                {% if v.change_note %}<br><small>{{ v.change_note }}</small>{% endif %}
+            </div>
+            {% if admin.role in ('write', 'superadmin') %}
+            <form method="POST" action="{{ page_url }}/restore/{{ v.id }}" style="margin: 0;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <button type="submit" class="btn btn-sm">Restore</button>
+            </form>
+            {% endif %}
+        </div>
+        {% endif %}
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+{% endblock %}

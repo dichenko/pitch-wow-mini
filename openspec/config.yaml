@@ -1,0 +1,17 @@
+schema: spec-driven
+
+# Project context
+context: |
+  Tech stack: Python 3.12, FastAPI, aiogram 3, LangChain/LangGraph, SQLAlchemy 2.0 async, PostgreSQL 16, Docker Compose, Jinja2 + HTMX, Pydantic Settings, Alembic
+  Purpose: Reusable monorepo template for rapid deployment of Telegram AI-assistants
+  Conventions: async/await throughout, structured JSON logging, SHALL-style spec requirements, SHA-256 token hashing, append-only prompt versioning
+  Domain: Telegram bots, AI assistants, multi-project VPS deployment
+  Security: secrets only in .env, tokens stored as hashes, CSRF on all admin POST, localhost-only port binding, root admin via env fallback
+
+# Per-artifact rules
+rules:
+  proposal:
+    - Keep proposals under 500 words
+    - Always include a "Non-goals" section
+  tasks:
+    - Break tasks into chunks of max 2 hours

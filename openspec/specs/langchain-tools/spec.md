@@ -1,0 +1,114 @@
+# Spec: langchain-tools
+
+## Purpose
+
+LangGraph ReAct agent with registered tools for the Telegram bot. Includes a mandatory `send_to_admin` tool plus three stub tools demonstrating the pattern for future projects. Tool calls are logged to the database with trace IDs.
+
+## Requirements
+
+### Requirement: Bot shall use LangGraph ReAct agent with registered tools
+
+The system SHALL use a LangGraph ReAct agent (`create_react_agent`) with a configurable LLM provider.
+
+Supported providers: OpenAI (`ChatOpenAI`) and Anthropic (`ChatAnthropic`).
+
+Four tools registered: `send_to_admin` (REQUIRED), `save_lead` (stub), `get_project_knowledge` (reads knowledge file), `create_followup_task` (stub).
+
+LLM provider and model SHALL be read from `app_settings` (`llm_provider`, `llm_model`), falling back to `.env` defaults. Temperature SHALL be 0.7.
+
+Provider-specific configuration:
+
+- **OpenAI**: uses `OPENAI_API_KEY`, `OPENAI_BASE_URL` from `.env`
+- **Anthropic**: uses `ANTHROPIC_API_KEY` from `.env`
+
+#### Scenario: Bot starts with template tools registered
+
+- **WHEN** a bot starts from the template and the LangChain agent initializes
+- **THEN** all four tools SHALL be registered
+
+#### Scenario: Agent uses OpenAI
+
+- **WHEN** `llm_provider` is set to `openai` (or not set) and a user sends a message
+- **THEN** the main agent SHALL invoke `ChatOpenAI` with the configured model
+
+#### Scenario: Agent uses Anthropic
+
+- **WHEN** `llm_provider` is set to `anthropic` and a user sends a message
+- **THEN** the main agent SHALL invoke `ChatAnthropic` with the configured model
+
+#### Scenario: Anthropic API key missing
+
+- **WHEN** `llm_provider` is `anthropic` and `ANTHROPIC_API_KEY` is not set
+- **THEN** the agent SHALL log an error and return a clear error message to the user
+
+### Requirement: Tools shall be defined in code, not in admin panel
+
+The system SHALL NOT allow admins to create arbitrary executable tools from the web UI. Admin panel can only edit natural language usage instructions.
+
+#### Scenario: Admin changes tools instruction
+
+- **WHEN** a tool exists in code and admin changes tools instruction
+- **THEN** agent behavior may change but executable implementation SHALL remain unchanged
+
+### Requirement: Tool calls shall be logged
+
+The system SHALL log every tool call to `tool_call_logs` with: `trace_id`, `user_tg_id`, `tool_name`, `tool_input` (JSONB), `tool_output`, `status`, `error`, `duration_ms`, `created_at`.
+
+#### Scenario: Tool call logged to DB
+
+- **WHEN** the agent invokes a tool and the tool call completes
+- **THEN** a row SHALL be inserted into `tool_call_logs`
+
+### Requirement: Agent requests shall have trace IDs
+
+Every user message processed by the agent SHALL have a unique trace ID (UUID4). Trace ID SHALL be included in: application logs, tool call logs, censor runs, admin notifications, and LangSmith metadata.
+
+#### Scenario: Trace ID propagated through request
+
+- **WHEN** a user sends a message and the agent processes it
+- **THEN** a unique trace_id SHALL be generated and included in all logs and DB records for that request
+
+### Requirement: Template shall include a mandatory `send_to_admin` tool
+
+The system SHALL provide `send_to_admin` registered out of the box without additional developer configuration.
+
+**LLM-facing signature:** `send_to_admin(comment: str)`. The LLM passes only `comment`. All Telegram user data is attached server-side: `tg_id`, `first_name`, `last_name`, `username`, `telegram_link` (derived from username), `language_code`, `trace_id`, timestamp.
+
+#### Scenario: Agent calls `send_to_admin`
+
+- **WHEN** the LangChain agent invokes `send_to_admin(comment="...")`
+- **THEN** the tool SHALL attach all user fields server-side
+
+#### Scenario: ADMIN_TELEGRAM_CHAT_ID is not configured
+
+- **WHEN** `ADMIN_TELEGRAM_CHAT_ID` is empty and the agent invokes `send_to_admin`
+- **THEN** the tool SHALL save the notification to `admin_notifications` table without breaking the conversation
+- **THEN** return a success confirmation to the agent
+
+#### Scenario: ADMIN_TELEGRAM_CHAT_ID is configured
+
+- **WHEN** `ADMIN_TELEGRAM_CHAT_ID` is set and the agent invokes `send_to_admin`
+- **THEN** the tool SHALL send the formatted message to that Telegram chat via Bot API
+- **THEN** also save the notification record to `admin_notifications` with `delivered = TRUE`
+
+#### Scenario: User has no username
+
+- **WHEN** a Telegram user without a `username` invokes `send_to_admin`
+- **THEN** `telegram_link` SHALL be `null` in the notification payload
+
+#### Scenario: Tool is registered by default
+
+- **WHEN** a new assistant project is created from the template and the bot starts
+- **THEN** `send_to_admin` SHALL already be registered in the LangChain agent
+
+#### Scenario: LLM does not generate user data
+
+- **WHEN** the `send_to_admin` tool is invoked and the LLM constructs the tool call
+- **THEN** the LLM SHALL only supply the `comment` argument
+- **THEN** all user identity fields SHALL be injected server-side
+
+#### Scenario: Tool call is logged
+
+- **WHEN** `send_to_admin` is invoked and the tool completes
+- **THEN** the call SHALL be logged to `tool_call_logs`
+- **THEN** the notification record SHALL be persisted in `admin_notifications`
