@@ -62,7 +62,7 @@ async def cmd_admin(message: Message) -> None:
         )
 
     # Send login link
-    login_url = f"{settings.admin_public_url}/admin/login?token={raw_token}"
+    login_url = f"{settings.admin_public_url.rstrip('/')}/admin/login?token={raw_token}"
     await message.answer(
         f"Ваша одноразовая ссылка для входа в панель администратора:\n\n"
         f"{login_url}\n\n"
