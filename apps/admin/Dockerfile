@@ -5,7 +5,8 @@ WORKDIR /app
 # Copy shared package first
 COPY packages/ /app/packages/
 
-# Copy admin service
+# Copy admin and bot services
+COPY apps/bot/ /app/apps/bot/
 COPY apps/admin/ /app/apps/admin/
 
 # Install dependencies
