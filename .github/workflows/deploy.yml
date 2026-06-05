@@ -23,3 +23,13 @@ jobs:
             cd infra
             docker compose up -d --build
             docker compose exec -T bot alembic -c /app/migrations/alembic.ini upgrade head
+
+      - name: Notify admin via Telegram
+        if: success()
+        run: |
+          SHORT_SHA="${GITHUB_SHA::7}"
+          MSG="<b>Deploy success</b>%0A%0ARepo: <code>pitch-wow-mini</code>%0ACommit: <code>${SHORT_SHA}</code>"
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.ADMIN_TELEGRAM_CHAT_ID }}" \
+            -d parse_mode="HTML" \
+            -d text="${MSG}"
