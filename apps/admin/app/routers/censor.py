@@ -2,7 +2,7 @@
 
 import os
 
-from fastapi import APIRouter, Form, Request
+from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
@@ -13,6 +13,7 @@ from apps.admin.app.services.session import (
     get_or_create_csrf_token,
     require_role,
     set_csrf_cookie,
+    verify_csrf,
 )
 from apps.bot.app.services.audit_service import log_audit_event
 from packages.shared.models.database import AppSetting, PromptVersion
@@ -75,6 +76,8 @@ async def save_censor(
     content: str = Form(...),
     change_note: str = Form(""),
     censor_enabled: str = Form("false"),
+    csrf_token: str = Form(""),
+    _csrf=Depends(verify_csrf),
 ):
     admin = require_role(request, "write")
 
@@ -128,7 +131,7 @@ async def save_censor(
 
 
 @router.post("/admin/censor/restore/{version_id}")
-async def restore_censor(request: Request, version_id: str):
+async def restore_censor(request: Request, version_id: str, csrf_token: str = Form(""), _csrf=Depends(verify_csrf)):
     admin = require_role(request, "write")
 
     from apps.bot.app.services.prompt_service import restore_prompt_version

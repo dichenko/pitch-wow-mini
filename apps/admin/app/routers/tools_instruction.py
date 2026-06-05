@@ -2,7 +2,7 @@
 
 import os
 
-from fastapi import APIRouter, Form, Request
+from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
@@ -13,6 +13,7 @@ from apps.admin.app.services.session import (
     get_or_create_csrf_token,
     require_role,
     set_csrf_cookie,
+    verify_csrf,
 )
 from apps.bot.app.services.audit_service import log_audit_event
 from packages.shared.models.database import PromptVersion
@@ -63,7 +64,7 @@ async def view_tools_instruction(request: Request):
 
 
 @router.post("/admin/tools-instruction/save")
-async def save_tools_instruction(request: Request, content: str = Form(...), change_note: str = Form("")):
+async def save_tools_instruction(request: Request, content: str = Form(...), change_note: str = Form(""), _csrf=Depends(verify_csrf)):
     admin = require_role(request, "write")
 
     from apps.bot.app.services.prompt_service import create_prompt_version
@@ -91,7 +92,7 @@ async def save_tools_instruction(request: Request, content: str = Form(...), cha
 
 
 @router.post("/admin/tools-instruction/restore/{version_id}")
-async def restore_tools_instruction(request: Request, version_id: str):
+async def restore_tools_instruction(request: Request, version_id: str, csrf_token: str = Form(""), _csrf=Depends(verify_csrf)):
     admin = require_role(request, "write")
 
     from apps.bot.app.services.prompt_service import restore_prompt_version

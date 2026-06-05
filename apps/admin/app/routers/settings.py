@@ -4,11 +4,11 @@ import logging
 import os
 import uuid
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from apps.admin.app.services.session import get_current_admin, require_role, get_or_create_csrf_token, set_csrf_cookie
+from apps.admin.app.services.session import get_current_admin, require_role, get_or_create_csrf_token, set_csrf_cookie, verify_csrf
 from apps.bot.app.services.audit_service import log_audit_event
 from apps.bot.app.services.settings_service import (
     get_censor_model,
@@ -54,13 +54,16 @@ async def settings_page(request: Request):
 
 
 @router.post("/admin/settings/save", response_class=HTMLResponse)
-async def settings_save(request: Request):
+async def settings_save(
+    request: Request,
+    llm_provider: str = Form(default="openai"),
+    llm_model: str = Form(default=""),
+    censor_provider: str = Form(default="openai"),
+    censor_model: str = Form(default=""),
+    csrf_token: str = Form(default=""),
+    _csrf=Depends(verify_csrf),
+):
     admin = require_role(request, "write")
-
-    llm_provider = (await request.form()).get("llm_provider", "openai")
-    llm_model = (await request.form()).get("llm_model", "")
-    censor_provider = (await request.form()).get("censor_provider", "openai")
-    censor_model = (await request.form()).get("censor_model", "")
 
     if not llm_model or not censor_model:
         response = templates.TemplateResponse(

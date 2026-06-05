@@ -4,7 +4,7 @@ import logging
 import secrets
 from datetime import datetime, timezone
 
-from fastapi import HTTPException, Request, Response
+from fastapi import Depends, Form, HTTPException, Request, Response
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -127,7 +127,7 @@ def set_csrf_cookie(response: Response, token: str | None = None) -> str:
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
-    """Middleware for authentication and CSRF protection on admin routes."""
+    """Middleware for authentication on admin routes."""
 
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
@@ -146,19 +146,23 @@ class AuthMiddleware(BaseHTTPMiddleware):
             from fastapi.responses import RedirectResponse
             return RedirectResponse(url="/admin/login?token=", status_code=303)
 
-        # CSRF protection for POST requests
-        if request.method == "POST":
-            csrf_cookie = _get_csrf_from_cookie(request)
-            csrf_form = None
-
-            # Try to get CSRF from form data
-            try:
-                form = await request.form()
-                csrf_form = form.get("csrf_token")
-            except Exception:
-                pass
-
-            if not csrf_cookie or not csrf_form or csrf_cookie != csrf_form:
-                raise HTTPException(status_code=403, detail="CSRF token mismatch")
-
         return await call_next(request)
+
+
+async def verify_csrf(
+    request: Request,
+    csrf_token: str = Form(default=""),
+) -> None:
+    """Dependency: verify CSRF token for POST routes.
+
+    Must be added as a dependency on POST routes that use Form(...) fields.
+    Uses Form(...) in signature so FastAPI caches the parsed form body —
+    route handlers can then use their own Form(...) fields without re-reading.
+    """
+    if request.method != "POST":
+        return
+
+    csrf_cookie = _get_csrf_from_cookie(request)
+
+    if not csrf_cookie or not csrf_token or csrf_cookie != csrf_token:
+        raise HTTPException(status_code=403, detail="CSRF token mismatch")

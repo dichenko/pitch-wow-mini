@@ -2,7 +2,7 @@
 
 import os
 
-from fastapi import APIRouter, Form, Request
+from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
@@ -14,6 +14,7 @@ from apps.admin.app.services.session import (
     get_or_create_csrf_token,
     require_role,
     set_csrf_cookie,
+    verify_csrf,
 )
 from apps.bot.app.services.audit_service import log_audit_event
 from packages.shared.models.database import Admin
@@ -58,6 +59,8 @@ async def add_admin(
     username: str = Form(""),
     display_name: str = Form(""),
     role: str = Form("read"),
+    csrf_token: str = Form(""),
+    _csrf=Depends(verify_csrf),
 ):
     admin = require_role(request, "superadmin")
 
@@ -98,7 +101,7 @@ async def add_admin(
 
 
 @router.post("/admin/admins/deactivate/{admin_id}")
-async def deactivate_admin(request: Request, admin_id: str):
+async def deactivate_admin(request: Request, admin_id: str, csrf_token: str = Form(""), _csrf=Depends(verify_csrf)):
     admin = require_role(request, "superadmin")
 
     async with async_session_factory() as session:
@@ -126,7 +129,7 @@ async def deactivate_admin(request: Request, admin_id: str):
 
 
 @router.post("/admin/admins/change-role/{admin_id}")
-async def change_role(request: Request, admin_id: str, role: str = Form(...)):
+async def change_role(request: Request, admin_id: str, role: str = Form(...), csrf_token: str = Form(""), _csrf=Depends(verify_csrf)):
     admin = require_role(request, "superadmin")
 
     async with async_session_factory() as session:
