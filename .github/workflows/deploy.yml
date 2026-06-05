@@ -22,3 +22,4 @@ jobs:
             git pull origin master
             cd infra
             docker compose up -d --build
+            docker compose exec -T bot alembic -c /app/migrations/alembic.ini upgrade head
