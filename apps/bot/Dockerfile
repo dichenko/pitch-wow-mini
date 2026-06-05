@@ -9,8 +9,9 @@ WORKDIR /app
 # Copy shared package first
 COPY packages/ /app/packages/
 
-# Copy bot service
+# Copy bot service and migrations
 COPY apps/bot/ /app/apps/bot/
+COPY migrations/ /app/migrations/
 
 # Install dependencies
 RUN pip install --no-cache-dir -r apps/bot/requirements.txt
