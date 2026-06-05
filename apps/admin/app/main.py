@@ -16,7 +16,7 @@ from apps.admin.app.routers import (
     dashboard,
     debug,
     preview_prompt,
-    settings,
+    settings as settings_router,
     system_prompt,
     tools_instruction,
 )
@@ -46,7 +46,7 @@ app.include_router(censor.router)
 app.include_router(admins.router)
 app.include_router(debug.router)
 app.include_router(preview_prompt.router)
-app.include_router(settings.router)
+app.include_router(settings_router.router)
 
 
 @app.get("/health")
