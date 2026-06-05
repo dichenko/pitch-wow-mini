@@ -1,6 +1,7 @@
 """Alembic environment configuration."""
 
 import asyncio
+import os
 from logging.config import fileConfig
 
 from alembic import context
@@ -9,7 +10,6 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 import sys
-import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -21,6 +21,15 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 target_metadata = Base.metadata
+
+# Build database URL from environment variables
+DB_URL = (
+    f"postgresql+asyncpg://"
+    f"{os.environ['POSTGRES_USER']}:{os.environ['POSTGRES_PASSWORD']}"
+    f"@{os.environ['POSTGRES_HOST']}:{os.environ['POSTGRES_PORT']}"
+    f"/{os.environ['POSTGRES_DB']}"
+)
+config.set_main_option("sqlalchemy.url", DB_URL)
 
 
 def run_migrations_offline() -> None:
