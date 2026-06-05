@@ -36,6 +36,10 @@ class BotSettings(AppSettings):
     anthropic_api_key: str = ""
     anthropic_model: str = "claude-3-5-sonnet-latest"
 
+    # Mistral
+    mistral_api_key: str = ""
+    mistral_model: str = "mistral-large"
+
     # LangSmith
     langsmith_tracing: bool = False
     langsmith_api_key: str = ""

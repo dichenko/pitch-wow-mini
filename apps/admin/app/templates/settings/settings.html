@@ -24,6 +24,7 @@
             <select name="llm_provider">
                 <option value="openai" {% if llm_provider == "openai" %}selected{% endif %}>OpenAI</option>
                 <option value="anthropic" {% if llm_provider == "anthropic" %}selected{% endif %}>Anthropic Claude</option>
+                <option value="mistral" {% if llm_provider == "mistral" %}selected{% endif %}>Mistral AI</option>
             </select>
         </div>
         <div class="form-group">
@@ -39,6 +40,7 @@
             <select name="censor_provider">
                 <option value="openai" {% if censor_provider == "openai" %}selected{% endif %}>OpenAI</option>
                 <option value="anthropic" {% if censor_provider == "anthropic" %}selected{% endif %}>Anthropic Claude</option>
+                <option value="mistral" {% if censor_provider == "mistral" %}selected{% endif %}>Mistral AI</option>
             </select>
         </div>
         <div class="form-group">

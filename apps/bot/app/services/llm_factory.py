@@ -14,7 +14,7 @@ def create_llm(provider: str, model: str, temperature: float = 0.7):
     """Create an LLM instance for the given provider and model.
 
     Args:
-        provider: "openai" or "anthropic".
+        provider: "openai", "anthropic", or "mistral".
         model: Model name string.
         temperature: LLM temperature.
 
@@ -42,6 +42,17 @@ def create_llm(provider: str, model: str, temperature: float = 0.7):
         return ChatAnthropic(
             model=model,
             api_key=settings.anthropic_api_key,
+            temperature=temperature,
+        )
+
+    if provider == "mistral":
+        if not settings.mistral_api_key:
+            raise ValueError("MISTRAL_API_KEY is not set")
+        from langchain_mistralai import ChatMistralAI
+
+        return ChatMistralAI(
+            model=model,
+            api_key=settings.mistral_api_key,
             temperature=temperature,
         )
 
