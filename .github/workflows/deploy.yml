@@ -18,11 +18,12 @@ jobs:
           script: |
             set -e
             cd /opt/pitch-wow-mini
+            git config --global --add safe.directory /opt/pitch-wow-mini
             git checkout master
             git pull origin master
             cd infra
             docker compose up -d --build
-            docker compose exec -T bot alembic -c /app/migrations/alembic.ini upgrade head
+            docker compose exec -T -w /app/migrations bot alembic -c /app/migrations/alembic.ini upgrade head
 
       - name: Notify admin via Telegram
         if: success()
