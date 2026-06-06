@@ -83,7 +83,7 @@ async def create_agent(system_prompt: str, trace_id: str, prompt_meta: dict):
     agent = create_react_agent(
         llm,
         tools=tools,
-        prompt=system_prompt,
+        state_modifier=system_prompt,
         checkpointer=checkpointer,
     )
 
