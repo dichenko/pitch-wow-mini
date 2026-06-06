@@ -19,6 +19,7 @@ from apps.admin.app.routers import (
     settings as settings_router,
     system_prompt,
     tools_instruction,
+    welcome,
 )
 from apps.admin.app.services.session import AuthMiddleware
 from packages.shared.utils.logging import setup_logging
@@ -42,6 +43,7 @@ app.include_router(auth.router)
 app.include_router(dashboard.router)
 app.include_router(system_prompt.router)
 app.include_router(tools_instruction.router)
+app.include_router(welcome.router)
 app.include_router(censor.router)
 app.include_router(admins.router)
 app.include_router(debug.router)

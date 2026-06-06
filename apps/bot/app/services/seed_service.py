@@ -30,6 +30,11 @@ Rules:
 - Do not add information that was not in the original response
 - Return the edited response directly, without explanations"""
 
+DEFAULT_WELCOME_MESSAGE = (
+    "Привет! Я AI-ассистент. Чем могу помочь?\n\n"
+    "Для администраторов: используйте /admin для входа в панель управления."
+)
+
 
 async def seed_defaults() -> None:
     """Seed default prompt versions if the prompt_versions table is empty."""
@@ -71,6 +76,18 @@ async def seed_defaults() -> None:
                 kind="censor_prompt",
                 version_number=1,
                 content=DEFAULT_CENSOR_PROMPT,
+                is_active=True,
+                created_by_username="system",
+                change_note="Initial seed",
+            )
+        )
+
+        # Seed welcome message
+        session.add(
+            PromptVersion(
+                kind="welcome_message",
+                version_number=1,
+                content=DEFAULT_WELCOME_MESSAGE,
                 is_active=True,
                 created_by_username="system",
                 change_note="Initial seed",
