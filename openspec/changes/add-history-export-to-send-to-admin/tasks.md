@@ -12,5 +12,5 @@
 
 ## 3. Verify
 
-- [ ] 3.1 Push to master, wait for CI/CD deploy
-- [ ] 3.2 Trigger `send_to_admin`, verify `.md` file arrives in admin chat after notification
+- [x] 3.1 Push to master, wait for CI/CD deploy
+- [x] 3.2 Trigger `send_to_admin`, verify `.md` file arrives in admin chat after notification
