@@ -26,6 +26,13 @@ async def handle_message(message: Message) -> None:
     if not message.from_user or not message.text:
         return
 
+    await process_user_text(message=message, user_text=message.text)
+
+
+async def process_user_text(message: Message, user_text: str) -> None:
+    if not message.from_user or not user_text:
+        return
+
     trace_id = str(uuid.uuid4())
     user = message.from_user
     thread_id = get_thread_id(user.id)
@@ -64,7 +71,7 @@ async def handle_message(message: Message) -> None:
 
         # Invoke agent with config
         response = await agent.ainvoke(
-            {"messages": [("user", message.text)]},
+            {"messages": [("user", user_text)]},
             config=config,
         )
 
@@ -88,7 +95,7 @@ async def handle_message(message: Message) -> None:
         # Apply censor if enabled
         final_response = await apply_censor(
             draft_response=draft_response,
-            user_message=message.text,
+            user_message=user_text,
             trace_id=trace_id,
             user_tg_id=user.id,
         )

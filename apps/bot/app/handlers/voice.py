@@ -95,12 +95,10 @@ async def handle_voice(message: Message) -> None:
             logger.warning(f"Both STT providers failed for trace_id={trace_id}")
             return
 
-        # Process transcribed text as regular message
-        from apps.bot.app.handlers.message import handle_message as process_text
+        # Process transcribed text through the same LLM path as text messages.
+        from apps.bot.app.handlers.message import process_user_text
 
-        # Create a pseudo-message context
-        message.text = transcribed_text
-        await process_text(message)
+        await process_user_text(message=message, user_text=transcribed_text)
 
     except Exception as e:
         logger.error(f"Voice processing error trace_id={trace_id}: {e}", exc_info=True)
