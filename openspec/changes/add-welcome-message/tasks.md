@@ -16,5 +16,5 @@
 
 ## 4. Verify
 
-- [ ] 4.1 Push to master, wait for CI/CD deploy
-- [ ] 4.2 Test: send /start, verify welcome message arrives, send text message, verify LLM context includes welcome
+- [x] 4.1 Push to master, wait for CI/CD deploy
+- [x] 4.2 Test: send /start, verify welcome message arrives, send text message, verify LLM context includes welcome
