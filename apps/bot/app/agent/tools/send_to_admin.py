@@ -1,6 +1,8 @@
 """send_to_admin — REQUIRED default tool for forwarding information to admins."""
 
 import logging
+import os
+import tempfile
 import time
 from datetime import datetime, timezone
 
@@ -9,6 +11,7 @@ from sqlalchemy import select
 
 from apps.bot.app.config import get_settings
 from apps.bot.app.db.session import async_session_factory
+from apps.bot.app.services.history_service import load_all_user_history
 from packages.shared.models.database import AdminNotification
 
 logger = logging.getLogger(__name__)
@@ -22,6 +25,45 @@ def set_tool_context(user_data: dict, trace_id: str) -> None:
     """Set the current Telegram user context for tool invocations."""
     _current_context["user_data"] = user_data
     _current_context["trace_id"] = trace_id
+
+
+def _format_history_markdown(
+    first_name: str | None,
+    last_name: str | None,
+    username: str | None,
+    tg_id: int,
+    records,
+) -> str:
+    """Format dialogue history as a markdown string."""
+    name_parts = [p for p in (first_name, last_name) if p]
+    display_name = " ".join(name_parts) if name_parts else "—"
+    export_time = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+    lines = [
+        "# Dialogue History",
+        "",
+        f"**User:** {display_name} (@{username or '—'})",
+        f"**TG ID:** {tg_id}",
+        f"**Exported at:** {export_time}",
+        "",
+        "---",
+        "",
+    ]
+
+    if not records:
+        lines.append("*No dialogue history recorded*")
+    else:
+        for record in records:
+            lines.append(f"## User:")
+            lines.append(record.user_message or "")
+            lines.append("")
+            lines.append(f"## Assistant:")
+            lines.append(record.assistant_response or "")
+            lines.append("")
+            lines.append("---")
+            lines.append("")
+
+    return "\n".join(lines)
 
 
 @tool
@@ -76,6 +118,41 @@ async def send_to_admin(comment: str) -> str:
             )
             await bot.send_message(int(settings.admin_telegram_chat_id), message_text)
             delivered = True
+
+            # Send dialogue history as markdown file
+            tmp_path = None
+            try:
+                records = await load_all_user_history(tg_id)
+                md_content = _format_history_markdown(
+                    first_name=first_name,
+                    last_name=last_name,
+                    username=username,
+                    tg_id=tg_id,
+                    records=records,
+                )
+
+                with tempfile.NamedTemporaryFile(
+                    mode="w",
+                    suffix=".md",
+                    prefix=f"history_{tg_id}_",
+                    encoding="utf-8",
+                    delete=False,
+                ) as tmp:
+                    tmp.write(md_content)
+                    tmp_path = tmp.name
+
+                from aiogram.types import FSInputFile
+
+                await bot.send_document(
+                    int(settings.admin_telegram_chat_id),
+                    document=FSInputFile(tmp_path),
+                    caption=f"История диалога @{username or tg_id}",
+                )
+            except Exception as e:
+                logger.error(f"Failed to send history file to admin chat: {e}")
+            finally:
+                if tmp_path and os.path.exists(tmp_path):
+                    os.remove(tmp_path)
         except Exception as e:
             delivery_error = str(e)
             logger.error(f"Failed to send to admin chat: {e}")

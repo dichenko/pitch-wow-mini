@@ -84,3 +84,16 @@ async def save_dialogue_turn_best_effort(**kwargs) -> None:
             exc,
             exc_info=True,
         )
+
+
+async def load_all_user_history(
+    user_tg_id: int,
+) -> list[DialogueHistory]:
+    """Load all dialogue records for a user across all threads, chronologically."""
+    async with async_session_factory() as session:
+        result = await session.execute(
+            select(DialogueHistory)
+            .where(DialogueHistory.user_tg_id == user_tg_id)
+            .order_by(DialogueHistory.created_at.asc())
+        )
+        return list(result.scalars().all())
