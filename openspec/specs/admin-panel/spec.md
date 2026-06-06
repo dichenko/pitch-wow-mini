@@ -3,9 +3,7 @@
 ## Purpose
 
 A separate FastAPI web service providing an admin panel for managing the AI assistant. Uses Jinja2 templates with HTMX for server-side rendering. Provides pages for System Prompt, Tools Instruction, Censor, Administrators, Debug, and Preview Assembled Prompt management.
-
 ## Requirements
-
 ### Requirement: Admin panel shall be a separate web service
 
 The system SHALL provide admin panel as a separate service `admin`.
@@ -24,16 +22,17 @@ Admin panel SHALL include the following sections:
 
 1. System Prompt
 2. Tools Instruction
-3. Administrators
-4. Censor (response reviewer)
-5. Debug
-6. Preview Assembled Prompt
-7. Settings
+3. Welcome Message
+4. Administrators
+5. Censor (response reviewer)
+6. Debug
+7. Preview Assembled Prompt
+8. Settings
 
 #### Scenario: Admin navigates to sections
 
 - **WHEN** an authenticated admin opens the admin panel and the dashboard loads
-- **THEN** navigation links SHALL be present for System Prompt, Tools Instruction, Censor, Administrators, Debug, Preview Prompt and Settings sections
+- **THEN** navigation links SHALL be present for System Prompt, Tools Instruction, Welcome Message, Censor, Administrators, Debug, Preview Prompt and Settings sections
 
 ### Requirement: System Prompt page
 
@@ -198,3 +197,4 @@ The preview page SHALL display the full assembled prompt as sent to the LLM, com
 - **WHEN** an authenticated admin opens the preview prompt page
 - **THEN** the full assembled prompt SHALL be displayed in read-only form
 - **THEN** the admin SHALL see the exact text that is sent to the LLM as the system message
+
