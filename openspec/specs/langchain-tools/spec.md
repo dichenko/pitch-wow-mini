@@ -3,14 +3,12 @@
 ## Purpose
 
 LangGraph ReAct agent with registered tools for the Telegram bot. Includes a mandatory `send_to_admin` tool plus three stub tools demonstrating the pattern for future projects. Tool calls are logged to the database with trace IDs.
-
 ## Requirements
-
 ### Requirement: Bot shall use LangGraph ReAct agent with registered tools
 
 The system SHALL use a LangGraph ReAct agent (`create_react_agent`) with a configurable LLM provider and a `MemorySaver` checkpointer for multi-turn conversation continuity.
 
-Supported providers: OpenAI (`ChatOpenAI`) and Anthropic (`ChatAnthropic`).
+Supported providers: OpenAI (`ChatOpenAI`), Anthropic (`ChatAnthropic`), and Mistral (`ChatMistralAI`).
 
 Four tools registered: `send_to_admin` (REQUIRED), `save_lead` (stub), `get_project_knowledge` (reads knowledge file), `create_followup_task` (stub).
 
@@ -20,6 +18,9 @@ Provider-specific configuration:
 
 - **OpenAI**: uses `OPENAI_API_KEY`, `OPENAI_BASE_URL` from `.env`
 - **Anthropic**: uses `ANTHROPIC_API_KEY` from `.env`
+- **Mistral**: uses `MISTRAL_API_KEY` from `.env`
+
+The assembled system prompt SHALL be passed to `create_react_agent` using a keyword supported by the pinned LangGraph runtime.
 
 The agent SHALL be configured with a checkpointer. Each user SHALL have a persistent `thread_id` based on their Telegram user ID for conversation continuity across messages.
 
@@ -38,10 +39,21 @@ The agent SHALL be configured with a checkpointer. Each user SHALL have a persis
 - **WHEN** `llm_provider` is set to `anthropic` and a user sends a message
 - **THEN** the main agent SHALL invoke `ChatAnthropic` with the configured model
 
+#### Scenario: Agent uses Mistral
+
+- **WHEN** `llm_provider` is set to `mistral` and a user sends a message
+- **THEN** the main agent SHALL invoke `ChatMistralAI` with the configured model
+
 #### Scenario: Anthropic API key missing
 
 - **WHEN** `llm_provider` is `anthropic` and `ANTHROPIC_API_KEY` is not set
 - **THEN** the agent SHALL log an error and return a clear error message to the user
+
+#### Scenario: Agent factory uses supported LangGraph prompt parameter
+
+- **WHEN** the agent is created with the assembled system prompt
+- **THEN** `create_react_agent` SHALL be called without unsupported keyword arguments
+- **THEN** the assembled system prompt SHALL be provided to the LangGraph agent
 
 #### Scenario: Conversation context preserved across messages
 
@@ -148,3 +160,4 @@ The system SHALL provide `send_to_admin` registered out of the box without addit
 - **WHEN** `send_to_admin` is invoked and the tool completes
 - **THEN** the call SHALL be logged to `tool_call_logs`
 - **THEN** the notification record SHALL be persisted in `admin_notifications`
+
