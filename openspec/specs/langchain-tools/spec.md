@@ -135,10 +135,14 @@ The system SHALL provide `send_to_admin` registered out of the box without addit
 
 **LLM-facing signature:** `send_to_admin(comment: str)`. The LLM passes only `comment`. All Telegram user data is attached server-side: `tg_id`, `first_name`, `last_name`, `username`, `telegram_link` (derived from username), `language_code`, `trace_id`, timestamp.
 
+After sending the notification message, the tool SHALL additionally generate and send a markdown file containing the user's full dialogue history.
+
 #### Scenario: Agent calls `send_to_admin`
 
 - **WHEN** the LangChain agent invokes `send_to_admin(comment="...")`
 - **THEN** the tool SHALL attach all user fields server-side
+- **THEN** the tool SHALL send a formatted notification to the admin chat
+- **THEN** the tool SHALL send a `.md` file with the user's full dialogue history
 
 #### Scenario: ADMIN_TELEGRAM_CHAT_ID is not configured
 
@@ -150,6 +154,7 @@ The system SHALL provide `send_to_admin` registered out of the box without addit
 
 - **WHEN** `ADMIN_TELEGRAM_CHAT_ID` is set and the agent invokes `send_to_admin`
 - **THEN** the tool SHALL send the formatted message to that Telegram chat via Bot API
+- **THEN** the tool SHALL send a `.md` file attachment with the user's full dialogue history
 - **THEN** also save the notification record to `admin_notifications` with `delivered = TRUE`
 
 #### Scenario: User has no username
