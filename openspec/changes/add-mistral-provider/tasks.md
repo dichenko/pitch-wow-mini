@@ -17,4 +17,4 @@
 
 ## 5. Verify
 
-- [ ] 5.1 Push to master, wait for CI/CD, verify Mistral appears in admin settings page as provider option
+- [x] 5.1 Push to master, wait for CI/CD, verify Mistral appears in admin settings page as provider option

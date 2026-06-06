@@ -18,7 +18,7 @@
 <div class="card">
     <h3>Main Agent LLM</h3>
     <form method="POST" action="/admin/settings/save" style="display: contents;">
-        <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token', '') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <div class="form-group">
             <label>Provider</label>
             <select name="llm_provider">

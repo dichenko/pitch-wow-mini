@@ -7,8 +7,15 @@ import uuid
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+from sqlalchemy import select
 
-from apps.admin.app.services.session import get_current_admin, require_role, get_or_create_csrf_token, set_csrf_cookie, verify_csrf
+from apps.admin.app.services.session import (
+    get_current_admin,
+    get_or_create_csrf_token,
+    require_role,
+    set_csrf_cookie,
+    verify_csrf,
+)
 from apps.bot.app.services.audit_service import log_audit_event
 from apps.bot.app.services.settings_service import (
     get_censor_model,
@@ -37,8 +44,10 @@ async def settings_page(request: Request):
     llm_model = await get_llm_model()
     censor_provider = await get_censor_provider()
     censor_model = await get_censor_model()
+    csrf_token = get_or_create_csrf_token(request)
 
     response = templates.TemplateResponse(
+        request,
         "settings/settings.html",
         {
             "request": request,
@@ -47,9 +56,10 @@ async def settings_page(request: Request):
             "llm_model": llm_model,
             "censor_provider": censor_provider,
             "censor_model": censor_model,
+            "csrf_token": csrf_token,
         },
     )
-    set_csrf_cookie(response)
+    set_csrf_cookie(response, csrf_token)
     return response
 
 
@@ -67,6 +77,7 @@ async def settings_save(
 
     if not llm_model or not censor_model:
         response = templates.TemplateResponse(
+            request,
             "settings/settings.html",
             {
                 "request": request,
@@ -75,10 +86,11 @@ async def settings_save(
                 "llm_model": llm_model,
                 "censor_provider": censor_provider,
                 "censor_model": censor_model,
+                "csrf_token": csrf_token,
                 "error": "Model names cannot be empty",
             },
         )
-        set_csrf_cookie(response)
+        set_csrf_cookie(response, csrf_token)
         return response
 
     async with async_session_factory() as session:
@@ -112,6 +124,7 @@ async def settings_save(
         )
 
     response = templates.TemplateResponse(
+        request,
         "settings/settings.html",
         {
             "request": request,
@@ -120,8 +133,9 @@ async def settings_save(
             "llm_model": llm_model,
             "censor_provider": censor_provider,
             "censor_model": censor_model,
+            "csrf_token": csrf_token,
             "success": "Settings saved successfully",
         },
     )
-    set_csrf_cookie(response)
+    set_csrf_cookie(response, csrf_token)
     return response
