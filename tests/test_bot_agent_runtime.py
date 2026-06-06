@@ -50,7 +50,7 @@ async def test_create_agent_uses_langgraph_state_modifier(monkeypatch):
     }
     assert "prompt" not in calls["agent"]["kwargs"]
     assert calls["agent"]["kwargs"]["state_modifier"] == "assembled system prompt"
-    assert calls["agent"]["kwargs"]["checkpointer"] is agent_module.checkpointer
+    assert "checkpointer" not in calls["agent"]["kwargs"]
 
 
 def test_polling_healthcheck_checks_bot_main_process(monkeypatch):

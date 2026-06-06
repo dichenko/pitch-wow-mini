@@ -205,6 +205,34 @@ class CensorRun(Base):
     )
 
 
+class DialogueHistory(Base):
+    __tablename__ = "dialogue_history"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=generate_uuid
+    )
+    thread_id: Mapped[str] = mapped_column(Text, nullable=False)
+    user_tg_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    trace_id: Mapped[str] = mapped_column(Text, nullable=False)
+    user_message: Mapped[str] = mapped_column(Text, nullable=False)
+    assistant_response: Mapped[str] = mapped_column(Text, nullable=False)
+    llm_provider: Mapped[str | None] = mapped_column(Text, nullable=True)
+    llm_model: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_dialogue_history_user_thread_created_at",
+            "user_tg_id",
+            "thread_id",
+            "created_at",
+        ),
+        Index("ix_dialogue_history_trace_id", "trace_id"),
+    )
+
+
 class AppSetting(Base):
     __tablename__ = "app_settings"
 

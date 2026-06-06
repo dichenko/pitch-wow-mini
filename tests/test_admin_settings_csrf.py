@@ -45,6 +45,9 @@ def settings_client(monkeypatch):
     async def get_censor_model():
         return "claude-3-5-sonnet-latest"
 
+    async def get_llm_history_messages():
+        return 20
+
     async def save_llm_settings(**kwargs):
         state["saved"] = kwargs
 
@@ -65,6 +68,7 @@ def settings_client(monkeypatch):
     monkeypatch.setattr(settings_router, "get_llm_model", get_llm_model)
     monkeypatch.setattr(settings_router, "get_censor_provider", get_censor_provider)
     monkeypatch.setattr(settings_router, "get_censor_model", get_censor_model)
+    monkeypatch.setattr(settings_router, "get_llm_history_messages", get_llm_history_messages)
     monkeypatch.setattr(settings_router, "save_llm_settings", save_llm_settings)
     monkeypatch.setattr(settings_router, "log_audit_event", log_audit_event)
     monkeypatch.setattr(settings_router, "async_session_factory", lambda: _FakeSession())
@@ -88,6 +92,8 @@ def test_settings_page_renders_csrf_matching_cookie(settings_client):
     form_token = _extract_csrf_token(response.text)
     assert cookie_token
     assert form_token == cookie_token
+    assert 'name="llm_history_messages"' in response.text
+    assert 'value="20"' in response.text
 
 
 def test_settings_save_rejects_missing_csrf_form_token(settings_client):
@@ -101,6 +107,7 @@ def test_settings_save_rejects_missing_csrf_form_token(settings_client):
             "llm_model": "gpt-4.1-mini",
             "censor_provider": "anthropic",
             "censor_model": "claude-3-5-sonnet-latest",
+            "llm_history_messages": "20",
         },
     )
 
@@ -121,6 +128,7 @@ def test_settings_save_accepts_synchronized_csrf_token(settings_client):
             "llm_model": "mistral-large-latest",
             "censor_provider": "openai",
             "censor_model": "gpt-4.1-mini",
+            "llm_history_messages": "5",
         },
     )
 
@@ -131,9 +139,33 @@ def test_settings_save_accepts_synchronized_csrf_token(settings_client):
         "llm_model": "mistral-large-latest",
         "censor_provider": "openai",
         "censor_model": "gpt-4.1-mini",
+        "llm_history_messages": 5,
         "admin_id": None,
     }
     assert state["audit"]["action"] == "settings.updated"
+    assert state["audit"]["metadata"]["llm_history_messages"] == 5
+
+
+def test_settings_save_rejects_invalid_history_count(settings_client):
+    client, state = settings_client
+    get_response = client.get("/admin/settings")
+    csrf_token = _extract_csrf_token(get_response.text)
+
+    response = client.post(
+        "/admin/settings/save",
+        data={
+            "csrf_token": csrf_token,
+            "llm_provider": "openai",
+            "llm_model": "gpt-4.1-mini",
+            "censor_provider": "anthropic",
+            "censor_model": "claude-3-5-sonnet-latest",
+            "llm_history_messages": "-1",
+        },
+    )
+
+    assert response.status_code == 200
+    assert "LLM_HISTORY_MESSAGES cannot be negative" in response.text
+    assert state["saved"] is None
 
 
 def test_read_role_cannot_save_settings_with_valid_csrf(settings_client):
@@ -150,6 +182,7 @@ def test_read_role_cannot_save_settings_with_valid_csrf(settings_client):
             "llm_model": "gpt-4.1-mini",
             "censor_provider": "anthropic",
             "censor_model": "claude-3-5-sonnet-latest",
+            "llm_history_messages": "20",
         },
     )
 

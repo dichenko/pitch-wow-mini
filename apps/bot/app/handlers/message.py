@@ -7,13 +7,19 @@ import uuid
 from aiogram import Router
 from aiogram.filters import Command
 from aiogram.types import Message
-from langchain_core.messages import ToolMessage
+from langchain_core.messages import HumanMessage, ToolMessage
 
 from apps.bot.app.agent.agent import create_agent, get_thread_id
 from apps.bot.app.agent.prompt_assembler import assemble_prompt
 from apps.bot.app.agent.tools.send_to_admin import set_tool_context
 from apps.bot.app.config import get_settings
 from apps.bot.app.services.censor_service import apply_censor
+from apps.bot.app.services.history_service import (
+    dialogue_history_to_messages,
+    load_dialogue_history,
+    save_dialogue_turn_best_effort,
+)
+from apps.bot.app.services.settings_service import get_llm_history_messages
 from apps.bot.app.services.tool_log_service import log_tool_call
 
 logger = logging.getLogger(__name__)
@@ -52,6 +58,13 @@ async def process_user_text(message: Message, user_text: str) -> None:
     try:
         # Assemble prompt
         system_prompt, prompt_meta = await assemble_prompt()
+        history_limit = await get_llm_history_messages()
+        history_records = await load_dialogue_history(
+            user_tg_id=user.id,
+            thread_id=thread_id,
+            limit=history_limit,
+        )
+        history_messages = dialogue_history_to_messages(history_records)
 
         # Add telegram user info to metadata for LangSmith
         prompt_meta["telegram_user_id"] = user.id
@@ -71,7 +84,7 @@ async def process_user_text(message: Message, user_text: str) -> None:
 
         # Invoke agent with config
         response = await agent.ainvoke(
-            {"messages": [("user", user_text)]},
+            {"messages": [*history_messages, HumanMessage(content=user_text)]},
             config=config,
         )
 
@@ -98,9 +111,19 @@ async def process_user_text(message: Message, user_text: str) -> None:
             user_message=user_text,
             trace_id=trace_id,
             user_tg_id=user.id,
+            history_messages=history_messages,
         )
 
         await message.answer(final_response)
+        await save_dialogue_turn_best_effort(
+            user_tg_id=user.id,
+            thread_id=thread_id,
+            trace_id=trace_id,
+            user_message=user_text,
+            assistant_response=final_response,
+            llm_provider=getattr(agent, "metadata", {}).get("llm_provider"),
+            llm_model=getattr(agent, "metadata", {}).get("llm_model"),
+        )
         logger.info(f"Message processed trace_id={trace_id} thread_id={thread_id} user_tg_id={user.id}")
 
     except Exception as e:

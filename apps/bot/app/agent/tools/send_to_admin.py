@@ -63,7 +63,7 @@ async def send_to_admin(comment: str) -> str:
     # Try to send to Telegram admin chat
     if settings.admin_telegram_chat_id:
         try:
-            from apps.bot.app.main import bot
+            from apps.bot.app.bot_instance import bot
 
             message_text = (
                 f"📨 <b>Сообщение от пользователя</b>\n\n"

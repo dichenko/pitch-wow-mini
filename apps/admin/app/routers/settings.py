@@ -18,8 +18,10 @@ from apps.admin.app.services.session import (
 )
 from apps.bot.app.services.audit_service import log_audit_event
 from apps.bot.app.services.settings_service import (
+    MAX_LLM_HISTORY_MESSAGES,
     get_censor_model,
     get_censor_provider,
+    get_llm_history_messages,
     get_llm_model,
     get_llm_provider,
     save_llm_settings,
@@ -34,6 +36,47 @@ templates_dir = os.path.join(os.path.dirname(__file__), "..", "templates")
 templates = Jinja2Templates(directory=templates_dir)
 
 
+def _settings_template_context(
+    request: Request,
+    admin: dict,
+    llm_provider: str,
+    llm_model: str,
+    censor_provider: str,
+    censor_model: str,
+    llm_history_messages: int | str,
+    csrf_token: str,
+    **extra,
+) -> dict:
+    context = {
+        "request": request,
+        "admin": admin,
+        "llm_provider": llm_provider,
+        "llm_model": llm_model,
+        "censor_provider": censor_provider,
+        "censor_model": censor_model,
+        "llm_history_messages": llm_history_messages,
+        "csrf_token": csrf_token,
+        "max_llm_history_messages": MAX_LLM_HISTORY_MESSAGES,
+    }
+    context.update(extra)
+    return context
+
+
+def _parse_llm_history_messages(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise ValueError("LLM_HISTORY_MESSAGES must be an integer") from exc
+
+    if parsed < 0:
+        raise ValueError("LLM_HISTORY_MESSAGES cannot be negative")
+    if parsed > MAX_LLM_HISTORY_MESSAGES:
+        raise ValueError(
+            f"LLM_HISTORY_MESSAGES cannot be greater than {MAX_LLM_HISTORY_MESSAGES}"
+        )
+    return parsed
+
+
 @router.get("/admin/settings", response_class=HTMLResponse)
 async def settings_page(request: Request):
     admin = get_current_admin(request)
@@ -44,20 +87,22 @@ async def settings_page(request: Request):
     llm_model = await get_llm_model()
     censor_provider = await get_censor_provider()
     censor_model = await get_censor_model()
+    llm_history_messages = await get_llm_history_messages()
     csrf_token = get_or_create_csrf_token(request)
 
     response = templates.TemplateResponse(
         request,
         "settings/settings.html",
-        {
-            "request": request,
-            "admin": admin,
-            "llm_provider": llm_provider,
-            "llm_model": llm_model,
-            "censor_provider": censor_provider,
-            "censor_model": censor_model,
-            "csrf_token": csrf_token,
-        },
+        _settings_template_context(
+            request=request,
+            admin=admin,
+            llm_provider=llm_provider,
+            llm_model=llm_model,
+            censor_provider=censor_provider,
+            censor_model=censor_model,
+            llm_history_messages=llm_history_messages,
+            csrf_token=csrf_token,
+        ),
     )
     set_csrf_cookie(response, csrf_token)
     return response
@@ -70,6 +115,7 @@ async def settings_save(
     llm_model: str = Form(default=""),
     censor_provider: str = Form(default="openai"),
     censor_model: str = Form(default=""),
+    llm_history_messages: str = Form(default="20"),
     csrf_token: str = Form(default=""),
     _csrf=Depends(verify_csrf),
 ):
@@ -79,16 +125,40 @@ async def settings_save(
         response = templates.TemplateResponse(
             request,
             "settings/settings.html",
-            {
-                "request": request,
-                "admin": admin,
-                "llm_provider": llm_provider,
-                "llm_model": llm_model,
-                "censor_provider": censor_provider,
-                "censor_model": censor_model,
-                "csrf_token": csrf_token,
-                "error": "Model names cannot be empty",
-            },
+            _settings_template_context(
+                request=request,
+                admin=admin,
+                llm_provider=llm_provider,
+                llm_model=llm_model,
+                censor_provider=censor_provider,
+                censor_model=censor_model,
+                llm_history_messages=llm_history_messages,
+                csrf_token=csrf_token,
+                error="Model names cannot be empty",
+            ),
+        )
+        set_csrf_cookie(response, csrf_token)
+        return response
+
+    try:
+        parsed_llm_history_messages = _parse_llm_history_messages(
+            llm_history_messages
+        )
+    except ValueError as exc:
+        response = templates.TemplateResponse(
+            request,
+            "settings/settings.html",
+            _settings_template_context(
+                request=request,
+                admin=admin,
+                llm_provider=llm_provider,
+                llm_model=llm_model,
+                censor_provider=censor_provider,
+                censor_model=censor_model,
+                llm_history_messages=llm_history_messages,
+                csrf_token=csrf_token,
+                error=str(exc),
+            ),
         )
         set_csrf_cookie(response, csrf_token)
         return response
@@ -105,6 +175,7 @@ async def settings_save(
         llm_model=llm_model,
         censor_provider=censor_provider,
         censor_model=censor_model,
+        llm_history_messages=parsed_llm_history_messages,
         admin_id=admin_id,
     )
 
@@ -120,22 +191,24 @@ async def settings_save(
                 "llm_model": llm_model,
                 "censor_provider": censor_provider,
                 "censor_model": censor_model,
+                "llm_history_messages": parsed_llm_history_messages,
             },
         )
 
     response = templates.TemplateResponse(
         request,
         "settings/settings.html",
-        {
-            "request": request,
-            "admin": admin,
-            "llm_provider": llm_provider,
-            "llm_model": llm_model,
-            "censor_provider": censor_provider,
-            "censor_model": censor_model,
-            "csrf_token": csrf_token,
-            "success": "Settings saved successfully",
-        },
+        _settings_template_context(
+            request=request,
+            admin=admin,
+            llm_provider=llm_provider,
+            llm_model=llm_model,
+            censor_provider=censor_provider,
+            censor_model=censor_model,
+            llm_history_messages=parsed_llm_history_messages,
+            csrf_token=csrf_token,
+            success="Settings saved successfully",
+        ),
     )
     set_csrf_cookie(response, csrf_token)
     return response

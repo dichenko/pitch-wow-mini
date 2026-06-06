@@ -2,8 +2,9 @@
 
 import logging
 import time
+from collections.abc import Sequence
 
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 
 from apps.bot.app.config import get_settings
 from apps.bot.app.db.session import async_session_factory
@@ -25,6 +26,7 @@ async def apply_censor(
     user_message: str,
     trace_id: str,
     user_tg_id: int,
+    history_messages: Sequence[BaseMessage] | None = None,
 ) -> str:
     """Apply censor LLM pass if enabled. Returns final response.
 
@@ -56,8 +58,9 @@ async def apply_censor(
 
         llm = create_llm(provider=censor_provider, model=censor_model, temperature=0.3)
 
-        messages = [
+        messages: list[BaseMessage] = [
             SystemMessage(content=censor_prompt),
+            *(history_messages or []),
             HumanMessage(
                 content=f"User message: {user_message}\n\n"
                 f"Draft response: {draft_response}\n\n"

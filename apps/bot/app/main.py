@@ -2,11 +2,10 @@
 
 import logging
 
-from aiogram import Bot, Dispatcher
-from aiogram.client.default import DefaultBotProperties
-from aiogram.enums import ParseMode
+from aiogram import Dispatcher
 from fastapi import FastAPI
 
+from apps.bot.app.bot_instance import bot
 from apps.bot.app.config import get_settings
 from apps.bot.app.handlers import admin, message, restart, start, voice
 from apps.bot.app.services.admin_service import bootstrap_root_admin
@@ -18,10 +17,6 @@ settings = get_settings()
 
 setup_logging("DEBUG" if settings.app_env == "dev" else "INFO")
 
-bot = Bot(
-    token=settings.telegram_bot_token,
-    default=DefaultBotProperties(parse_mode=ParseMode.HTML),
-)
 dp = Dispatcher()
 
 # Register handlers

@@ -28,6 +28,7 @@ class BotSettings(AppSettings):
 
     # LLM
     text_llm_provider: str = "openai"
+    llm_history_messages: int = 20
     openai_api_key: str = ""
     openai_base_url: str = "https://api.openai.com/v1"
     openai_text_model: str = "gpt-4.1-mini"
@@ -38,7 +39,7 @@ class BotSettings(AppSettings):
 
     # Mistral
     mistral_api_key: str = ""
-    mistral_model: str = "mistral-large"
+    mistral_model: str = "mistral-large-latest"
 
     # LangSmith
     langsmith_tracing: bool = False

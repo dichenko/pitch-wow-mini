@@ -3,7 +3,6 @@
 import logging
 import os
 
-from langgraph.checkpoint.memory import MemorySaver
 from langgraph.prebuilt import create_react_agent
 
 from apps.bot.app.agent.tools import get_all_tools
@@ -14,18 +13,12 @@ from apps.bot.app.services.settings_service import get_llm_model, get_llm_provid
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-# Shared checkpointer instance — one per bot process
-checkpointer = MemorySaver()
-
-# Track per-user thread reset counters
+# Track per-user thread reset counters.
 _user_reset_counters: dict[int, int] = {}
 
 
 def get_thread_id(user_tg_id: int) -> str:
-    """Get the current LangGraph thread_id for a user.
-
-    Returns a stable or reset-aware thread_id based on tg_id.
-    """
+    """Get the current thread ID for a user."""
     counter = _user_reset_counters.get(user_tg_id, 0)
     if counter == 0:
         return str(user_tg_id)
@@ -33,31 +26,20 @@ def get_thread_id(user_tg_id: int) -> str:
 
 
 def reset_user_thread(user_tg_id: int) -> None:
-    """Increment the thread counter for a user, effectively starting a fresh conversation."""
+    """Increment the thread counter for a user, starting a fresh conversation."""
     current = _user_reset_counters.get(user_tg_id, 0)
     _user_reset_counters[user_tg_id] = current + 1
     logger.info(f"User {user_tg_id} conversation reset (counter={current + 1})")
 
 
 async def create_agent(system_prompt: str, trace_id: str, prompt_meta: dict):
-    """Create a LangGraph ReAct agent with all registered tools.
-
-    Args:
-        system_prompt: Assembled system prompt.
-        trace_id: Local trace ID for logging and LangSmith metadata.
-        prompt_meta: Prompt version metadata.
-
-    Returns:
-        A compiled LangGraph agent ready for invocation.
-    """
+    """Create a LangGraph ReAct agent with all registered tools."""
     provider = await get_llm_provider()
     model = await get_llm_model()
 
     llm = create_llm(provider=provider, model=model, temperature=0.7)
-
     tools = get_all_tools()
 
-    # Build LangSmith tags
     tags = [
         f"project:{settings.project_slug}",
         f"env:{settings.app_env}",
@@ -67,7 +49,6 @@ async def create_agent(system_prompt: str, trace_id: str, prompt_meta: dict):
     if settings.langsmith_tags:
         tags.extend([t.strip() for t in settings.langsmith_tags.split(",") if t.strip()])
 
-    # Build LangSmith metadata (no secrets)
     metadata = {
         "trace_id": trace_id,
         "project_slug": settings.project_slug,
@@ -84,10 +65,8 @@ async def create_agent(system_prompt: str, trace_id: str, prompt_meta: dict):
         llm,
         tools=tools,
         state_modifier=system_prompt,
-        checkpointer=checkpointer,
     )
 
-    # Configure LangSmith tracing
     if settings.langsmith_tracing:
         os.environ["LANGSMITH_TRACING"] = "true"
         os.environ["LANGSMITH_API_KEY"] = settings.langsmith_api_key
@@ -99,7 +78,6 @@ async def create_agent(system_prompt: str, trace_id: str, prompt_meta: dict):
         os.environ.pop("LANGSMITH_TRACING", None)
         os.environ.pop("LANGSMITH_API_KEY", None)
 
-    # Wrap agent to inject metadata on invoke
     agent.metadata = metadata
     agent.tags = tags
 

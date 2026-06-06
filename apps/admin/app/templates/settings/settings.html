@@ -49,6 +49,21 @@
         </div>
 </div>
 
+<div class="card">
+    <h3>Conversation History</h3>
+        <div class="form-group">
+            <label>LLM_HISTORY_MESSAGES</label>
+            <input
+                type="number"
+                name="llm_history_messages"
+                min="0"
+                max="{{ max_llm_history_messages }}"
+                step="1"
+                value="{{ llm_history_messages }}"
+            />
+        </div>
+</div>
+
 <div style="margin-top: 20px;">
     {% if admin.role != "read" %}
     <button type="submit" class="btn">Save Settings</button>
