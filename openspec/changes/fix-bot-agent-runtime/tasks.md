@@ -14,5 +14,5 @@
 
 - [x] 3.1 Run the Python test suite.
 - [x] 3.2 Run `openspec validate fix-bot-agent-runtime --strict`.
-- [ ] 3.3 Verify on deployment that user messages no longer fail with `create_react_agent() got an unexpected keyword argument 'prompt'`.
-- [ ] 3.4 Verify the bot container health is not falsely unhealthy in `BOT_MODE=polling`.
+- [x] 3.3 Verify on deployment that user messages no longer fail with `create_react_agent() got an unexpected keyword argument 'prompt'`.
+- [x] 3.4 Verify the bot container health is not falsely unhealthy in `BOT_MODE=polling`.
