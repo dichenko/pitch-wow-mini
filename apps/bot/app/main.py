@@ -7,6 +7,7 @@ from fastapi import FastAPI
 
 from apps.bot.app.bot_instance import bot
 from apps.bot.app.config import get_settings
+from apps.bot.app.filters import is_private_message
 from apps.bot.app.handlers import admin, message, restart, start, voice
 from apps.bot.app.services.admin_service import bootstrap_root_admin
 from apps.bot.app.services.seed_service import seed_defaults
@@ -18,6 +19,7 @@ settings = get_settings()
 setup_logging("DEBUG" if settings.app_env == "dev" else "INFO")
 
 dp = Dispatcher()
+dp.message.filter(is_private_message)
 
 # Register handlers
 dp.include_router(start.router)
