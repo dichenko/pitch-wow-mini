@@ -66,7 +66,7 @@ def upgrade() -> None:
         sa.Column("restored_from_version_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.CheckConstraint(
-            "kind IN ('system_prompt', 'tools_instruction', 'censor_prompt')",
+            "kind IN ('system_prompt', 'tools_instruction', 'censor_prompt', 'welcome_message')",
             name="check_prompt_kind",
         ),
         sa.UniqueConstraint("kind", "version_number", name="uq_prompt_kind_version"),

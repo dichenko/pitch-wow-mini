@@ -53,6 +53,7 @@ async def process_user_text(message: Message, user_text: str) -> None:
             "language_code": user.language_code,
         },
         trace_id=trace_id,
+        current_user_message=user_text,
     )
 
     try:

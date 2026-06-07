@@ -123,6 +123,20 @@ class TestPromptAssembly:
         assert actual_hash == expected_hash
 
 
+class TestPromptKinds:
+    """Test supported PromptVersion kinds."""
+
+    def test_welcome_message_kind_is_supported(self):
+        valid_kinds = {
+            "system_prompt",
+            "tools_instruction",
+            "censor_prompt",
+            "welcome_message",
+        }
+
+        assert "welcome_message" in valid_kinds
+
+
 class TestCensorFallback:
     """Test censor service fallback logic."""
 

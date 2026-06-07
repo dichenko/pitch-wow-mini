@@ -110,7 +110,7 @@ class PromptVersion(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "kind IN ('system_prompt', 'tools_instruction', 'censor_prompt')",
+            "kind IN ('system_prompt', 'tools_instruction', 'censor_prompt', 'welcome_message')",
             name="check_prompt_kind",
         ),
         UniqueConstraint("kind", "version_number", name="uq_prompt_kind_version"),
