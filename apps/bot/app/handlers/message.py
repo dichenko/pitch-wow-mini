@@ -54,6 +54,7 @@ async def process_user_text(message: Message, user_text: str) -> None:
         },
         trace_id=trace_id,
         current_user_message=user_text,
+        current_thread_id=thread_id,
     )
 
     try:

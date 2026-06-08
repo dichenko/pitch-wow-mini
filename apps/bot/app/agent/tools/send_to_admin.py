@@ -11,7 +11,10 @@ from langchain_core.tools import tool
 
 from apps.bot.app.config import get_settings
 from apps.bot.app.db.session import async_session_factory
-from apps.bot.app.services.history_service import load_all_user_history
+from apps.bot.app.services.history_service import (
+    load_latest_user_thread_history,
+    load_user_thread_history,
+)
 from packages.shared.models.database import AdminNotification, DialogueHistory
 
 logger = logging.getLogger(__name__)
@@ -25,11 +28,13 @@ def set_tool_context(
     user_data: dict,
     trace_id: str,
     current_user_message: str | None = None,
+    current_thread_id: str | None = None,
 ) -> None:
     """Set the current Telegram user context for tool invocations."""
     _current_context["user_data"] = user_data
     _current_context["trace_id"] = trace_id
     _current_context["current_user_message"] = current_user_message
+    _current_context["current_thread_id"] = current_thread_id
 
 
 def _format_dt(value: datetime | None) -> tuple[str, str]:
@@ -38,23 +43,21 @@ def _format_dt(value: datetime | None) -> tuple[str, str]:
     if value.tzinfo is None:
         value = value.replace(tzinfo=timezone.utc)
     value = value.astimezone(timezone.utc)
-    return value.strftime("%Y-%m-%d"), value.strftime("%H:%M:%S UTC")
+    return value.strftime("%Y-%m-%d"), value.strftime("%H:%M")
 
 
-def _code_block(content: str | None) -> list[str]:
-    safe_content = (content or "").replace("```", "`\u200b``")
-    return ["```text", safe_content, "```"]
-
-
-def _append_message_block(
+def _append_dialogue_turn(
     lines: list[str],
-    date: str,
     time_text: str,
-    role: str,
-    content: str | None,
+    user_message: str | None,
+    assistant_response: str | None = None,
 ) -> None:
-    lines.append(f"### {date} · {time_text} · {role}")
-    lines.extend(_code_block(content))
+    lines.append(f"**{time_text} Фаундер**: {user_message or ''}")
+    lines.append("")
+    if assistant_response:
+        lines.append(f"**Ассистент**: {assistant_response}")
+        lines.append("")
+    lines.append("---")
     lines.append("")
 
 
@@ -67,7 +70,7 @@ def _format_history_markdown(
     current_user_message: str | None = None,
     current_comment: str | None = None,
 ) -> str:
-    """Format full dialogue history as a markdown string."""
+    """Format dialogue history as a date-grouped markdown string."""
     name_parts = [p for p in (first_name, last_name) if p]
     display_name = " ".join(name_parts) if name_parts else "—"
     export_time = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
@@ -88,34 +91,27 @@ def _format_history_markdown(
         lines.append("_В БД пока нет сохраненной истории диалога._")
         lines.append("")
     else:
-        for index, record in enumerate(records, start=1):
+        current_date = None
+        for record in records:
             date, time_text = _format_dt(record.created_at)
-            lines.append(f"## Запись {index}")
-            lines.append("")
-            lines.append(f"- **Thread:** `{record.thread_id}`")
-            lines.append(f"- **Trace:** `{record.trace_id}`")
-            lines.append("")
-            _append_message_block(lines, date, time_text, "Пользователь", record.user_message)
-            _append_message_block(lines, date, time_text, "Ассистент", record.assistant_response)
-            lines.append("---")
-            lines.append("")
+            if date != current_date:
+                lines.append(f"## {date}")
+                lines.append("")
+                current_date = date
+            _append_dialogue_turn(
+                lines,
+                time_text,
+                record.user_message,
+                record.assistant_response,
+            )
 
     if current_user_message:
         date, time_text = _format_dt(datetime.now(timezone.utc))
-        lines.append("## Текущий запрос")
-        lines.append("")
-        lines.append(
-            "_Эта реплика добавлена из текущего tool context, потому что текущий ход "
-            "еще не сохранен в `dialogue_history` на момент вызова `send_to_admin`._"
-        )
-        lines.append("")
-        _append_message_block(lines, date, time_text, "Пользователь", current_user_message)
-
-    if current_comment:
-        date, time_text = _format_dt(datetime.now(timezone.utc))
-        lines.append("## Передано администратору")
-        lines.append("")
-        _append_message_block(lines, date, time_text, "Комментарий", current_comment)
+        last_date_heading = f"## {date}"
+        if last_date_heading not in lines:
+            lines.append(f"## {date}")
+            lines.append("")
+        _append_dialogue_turn(lines, time_text, current_user_message)
 
     return "\n".join(lines)
 
@@ -134,6 +130,7 @@ async def send_to_admin(comment: str) -> str:
     user_data = _current_context.get("user_data", {})
     trace_id = _current_context.get("trace_id", "unknown")
     current_user_message = _current_context.get("current_user_message")
+    current_thread_id = _current_context.get("current_thread_id")
 
     tg_id = user_data.get("tg_id", 0)
     first_name = user_data.get("first_name")
@@ -177,13 +174,17 @@ async def send_to_admin(comment: str) -> str:
 
             tmp_path = None
             try:
-                records = await load_all_user_history(tg_id)
+                if current_thread_id:
+                    records = await load_user_thread_history(tg_id, current_thread_id)
+                else:
+                    records = await load_latest_user_thread_history(tg_id)
                 logger.info(
                     "Loaded %s dialogue history records for send_to_admin "
-                    "trace_id=%s user_tg_id=%s",
+                    "trace_id=%s user_tg_id=%s thread_id=%s",
                     len(records),
                     trace_id,
                     tg_id,
+                    current_thread_id or "latest",
                 )
                 md_content = _format_history_markdown(
                     first_name=first_name,

@@ -86,14 +86,44 @@ async def save_dialogue_turn_best_effort(**kwargs) -> None:
         )
 
 
-async def load_all_user_history(
+async def load_user_thread_history(
     user_tg_id: int,
+    thread_id: str,
 ) -> list[DialogueHistory]:
-    """Load all dialogue records for a user across all threads, chronologically."""
+    """Load all dialogue records for one user thread, chronologically."""
     async with async_session_factory() as session:
         result = await session.execute(
             select(DialogueHistory)
+            .where(
+                DialogueHistory.user_tg_id == user_tg_id,
+                DialogueHistory.thread_id == thread_id,
+            )
+            .order_by(DialogueHistory.created_at.asc())
+        )
+        return list(result.scalars().all())
+
+
+async def load_latest_user_thread_history(
+    user_tg_id: int,
+) -> list[DialogueHistory]:
+    """Load all records from the user's most recently updated thread."""
+    async with async_session_factory() as session:
+        result = await session.execute(
+            select(DialogueHistory.thread_id)
             .where(DialogueHistory.user_tg_id == user_tg_id)
+            .order_by(DialogueHistory.created_at.desc())
+            .limit(1)
+        )
+        latest_thread_id = result.scalar_one_or_none()
+        if latest_thread_id is None:
+            return []
+
+        result = await session.execute(
+            select(DialogueHistory)
+            .where(
+                DialogueHistory.user_tg_id == user_tg_id,
+                DialogueHistory.thread_id == latest_thread_id,
+            )
             .order_by(DialogueHistory.created_at.asc())
         )
         return list(result.scalars().all())
