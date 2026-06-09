@@ -35,9 +35,9 @@ async def handle_message(message: Message) -> None:
     await process_user_text(message=message, user_text=message.text)
 
 
-async def process_user_text(message: Message, user_text: str) -> None:
+async def process_user_text(message: Message, user_text: str) -> str | None:
     if not message.from_user or not user_text:
-        return
+        return None
 
     trace_id = str(uuid.uuid4())
     user = message.from_user
@@ -127,9 +127,11 @@ async def process_user_text(message: Message, user_text: str) -> None:
             llm_model=getattr(agent, "metadata", {}).get("llm_model"),
         )
         logger.info(f"Message processed trace_id={trace_id} thread_id={thread_id} user_tg_id={user.id}")
+        return final_response
 
     except Exception as e:
         logger.error(f"Agent error trace_id={trace_id}: {e}", exc_info=True)
         await message.answer(
             "Извините, произошла ошибка при обработке вашего сообщения. Попробуйте позже."
         )
+        return None

@@ -1,5 +1,6 @@
 """Settings service — reads and writes application settings from DB."""
 
+import json
 import logging
 import uuid
 
@@ -87,6 +88,25 @@ async def get_llm_history_messages() -> int:
         return DEFAULT_LLM_HISTORY_MESSAGES
 
     return min(value, MAX_LLM_HISTORY_MESSAGES)
+
+
+async def get_tts_prompt(language: str) -> str:
+    """Get optional TTS prompt/instructions for one language."""
+    prompts_raw = await _get_setting("tts.prompts", "{}")
+    try:
+        prompts = json.loads(prompts_raw)
+    except json.JSONDecodeError:
+        logger.warning("Invalid tts.prompts JSON; falling back to empty prompts")
+        prompts = {}
+
+    if isinstance(prompts, dict):
+        value = prompts.get(language, "")
+        if isinstance(value, str):
+            return value
+
+    if language == "en":
+        return settings.openai_tts_instructions
+    return ""
 
 
 async def save_llm_settings(
