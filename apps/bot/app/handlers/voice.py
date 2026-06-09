@@ -10,7 +10,11 @@ from aiogram.types import FSInputFile, Message
 
 from apps.bot.app.config import get_settings
 from apps.bot.app.services.settings_service import get_tts_prompt
-from apps.bot.app.speech import SpeechProviderError, create_speech_providers, normalize_language
+from apps.bot.app.speech import (
+    SpeechProviderError,
+    create_speech_providers,
+    detect_language_from_text,
+)
 from apps.bot.app.speech.temp_files import (
     cleanup_temp_file,
     create_temp_audio_path,
@@ -45,7 +49,7 @@ async def handle_voice(message: Message) -> None:
     if not media:
         return
 
-    language = normalize_language(message.from_user.language_code)
+    detected_language: str | None = None
     input_path: Path | None = None
     normalized_path: Path | None = None
     tts_original_path: Path | None = None
@@ -80,10 +84,20 @@ async def handle_voice(message: Message) -> None:
             return
 
         providers = create_speech_providers(settings)
-        stt_provider = providers.stt_for_language(language)
-        stt_result = await stt_provider.transcribe(str(normalized_path), language)
+        try:
+            stt_result = await providers.openai.transcribe(str(normalized_path), None)
+        except SpeechProviderError as exc:
+            logger.warning(
+                "OpenAI auto STT failed trace_id=%s error=%s; trying Aisha Uzbek fallback",
+                trace_id,
+                exc,
+            )
+            stt_result = await providers.aisha.transcribe(str(normalized_path), "uz")
+
         if not stt_result.text.strip():
             raise SpeechProviderError("STT returned empty text")
+
+        detected_language = detect_language_from_text(stt_result.text)
 
         from apps.bot.app.handlers.message import process_user_text
 
@@ -94,12 +108,19 @@ async def handle_voice(message: Message) -> None:
         if not response_text:
             return
 
+        if detected_language is None:
+            logger.info(
+                "Skipping TTS because transcript language is uncertain trace_id=%s",
+                trace_id,
+            )
+            return
+
         try:
-            tts_prompt = (await get_tts_prompt(language)).strip() or None
-            tts_provider = providers.tts_for_language(language)
+            tts_prompt = (await get_tts_prompt(detected_language)).strip() or None
+            tts_provider = providers.tts_for_language(detected_language)
             tts_result = await tts_provider.synthesize(
                 response_text,
-                language,
+                detected_language,
                 instructions=tts_prompt,
             )
             tts_original_path = Path(tts_result.file_path)
@@ -111,24 +132,24 @@ async def handle_voice(message: Message) -> None:
                 trace_id,
                 tts_result.provider,
                 tts_result.model,
-                language,
+                detected_language,
                 tts_result.format,
             )
         except Exception as exc:
             logger.error(
                 "TTS failed trace_id=%s language=%s error=%s",
                 trace_id,
-                language,
+                detected_language,
                 exc,
                 exc_info=True,
             )
-            await message.answer(TTS_FALLBACK_MESSAGES[language])
+            await message.answer(TTS_FALLBACK_MESSAGES[detected_language])
 
     except Exception as exc:
         logger.error(
             "Voice processing error trace_id=%s language=%s error=%s",
             trace_id,
-            language,
+            detected_language or "unknown",
             exc,
             exc_info=True,
         )

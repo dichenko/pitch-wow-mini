@@ -8,6 +8,7 @@ The bot already supports Telegram voice/audio input, but the handler downloads, 
 
 - Introduce a shared `apps.bot.app.speech` package for language normalization, STT/TTS protocols, provider results, errors, provider factory, temp files, and provider adapters.
 - Route `uz` to Aisha, `ru` to Yandex TTS/OpenAI STT, and `en` to OpenAI.
+- Detect voice-message language from the transcript before selecting TTS.
 - Keep the text response as the primary result and add TTS as a best-effort follow-up.
 - Keep secrets in settings and avoid logging API keys or authorization headers.
 - Cover routing, provider payloads, temp cleanup, conversion, and fallback behavior with tests.
@@ -40,11 +41,15 @@ The bot already supports Telegram voice/audio input, but the handler downloads, 
    - Rationale: it preserves the extension point without changing requested language routing.
    - Alternative considered: automatic Yandex-to-Azure fallback; this adds policy complexity and hidden costs.
 
+6. Use OpenAI STT without a language hint for voice messages before TTS routing.
+   - Rationale: users do not explicitly choose a language. The bot must transcribe first, detect the language from transcript text, and only then choose `ru`/`uz`/`en` TTS.
+   - Alternative considered: Telegram profile locale; this is not reliable because it describes the account UI language, not the spoken message.
+
 ## Risks / Trade-offs
 
 - Provider API details can drift or differ by account -> adapters validate key response fields and convert errors to `SpeechProviderError`; tests lock the request shapes described in the task.
 - `ffmpeg`/`ffprobe` must exist in runtime images -> current voice recognition already depends on them, and TTS conversion uses the same operational assumption.
-- TTS can add latency and provider cost -> text is sent first, and voice is best-effort.
+- TTS can add latency and provider cost -> text is sent first, language uncertainty skips TTS, and voice is best-effort.
 - Existing text handler did not return the generated response -> refactor it to return `str | None` while preserving current behavior for text messages.
 
 ## Migration Plan

@@ -25,7 +25,11 @@ class AishaSpeechProvider:
         self.settings = settings or get_settings()
         self.client = client
 
-    async def transcribe(self, file_path: str, language: str) -> SpeechToTextResult:
+    async def transcribe(
+        self,
+        file_path: str,
+        language: str | None = None,
+    ) -> SpeechToTextResult:
         if not self.settings.aisha_api_key or not self.settings.aisha_base_url:
             raise SpeechProviderError("Aisha STT is not configured")
 

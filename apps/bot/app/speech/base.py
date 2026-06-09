@@ -45,7 +45,11 @@ class TextToSpeechResult:
 
 
 class SpeechToTextProvider(Protocol):
-    async def transcribe(self, file_path: str, language: str) -> SpeechToTextResult:
+    async def transcribe(
+        self,
+        file_path: str,
+        language: str | None = None,
+    ) -> SpeechToTextResult:
         ...
 
 

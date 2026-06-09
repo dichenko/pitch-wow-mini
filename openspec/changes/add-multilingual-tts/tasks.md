@@ -11,9 +11,11 @@
 - [x] 2.2 Refactor text processing to return the final assistant response after sending text
 - [x] 2.3 Refactor voice handler to use speech factory for STT and best-effort TTS
 - [x] 2.4 Add language-specific TTS prompt lookup
+- [x] 2.5 Detect voice transcript language before selecting TTS
 
 ## 3. Verification
 
 - [x] 3.1 Add unit tests for language routing, provider payloads, text preparation, and temp cleanup
 - [x] 3.2 Add unit tests for voice pipeline text-first fallback behavior
 - [x] 3.3 Run OpenSpec validation and relevant pytest suite
+- [x] 3.4 Add unit tests for transcript-language TTS routing

@@ -28,6 +28,30 @@ The system SHALL route STT and TTS providers through a factory so Telegram handl
 - **WHEN** the normalized language is `uz`, `ru`, or `en`
 - **THEN** STT SHALL route `uz` to Aisha and `ru`/`en` to OpenAI
 
+### Requirement: Voice TTS shall use detected transcript language
+
+The system SHALL detect the language of the transcribed voice text before selecting a TTS provider. It SHALL NOT select TTS based on Telegram profile language.
+
+#### Scenario: Russian transcript selects Yandex
+
+- **WHEN** a voice transcript is detected as `ru`
+- **THEN** TTS SHALL route to Yandex SpeechKit
+
+#### Scenario: English transcript selects OpenAI
+
+- **WHEN** a voice transcript is detected as `en`
+- **THEN** TTS SHALL route to OpenAI
+
+#### Scenario: Uzbek transcript selects Aisha
+
+- **WHEN** a voice transcript is detected as `uz`
+- **THEN** TTS SHALL route to Aisha
+
+#### Scenario: Uncertain transcript skips TTS
+
+- **WHEN** transcript language cannot be confidently detected
+- **THEN** the bot SHALL keep the text answer and skip TTS
+
 ### Requirement: TTS providers shall prepare text safely
 
 The system SHALL remove Markdown, URLs, emoji, and excessive whitespace before sending text to TTS providers. Provider-specific length limits SHALL be enforced before or during provider calls.

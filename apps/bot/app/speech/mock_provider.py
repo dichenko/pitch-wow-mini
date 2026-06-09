@@ -11,7 +11,11 @@ class MockSpeechProvider:
         self.text = text
         self.audio = audio
 
-    async def transcribe(self, file_path: str, language: str) -> SpeechToTextResult:
+    async def transcribe(
+        self,
+        file_path: str,
+        language: str | None = None,
+    ) -> SpeechToTextResult:
         normalized = normalize_language(language)
         return SpeechToTextResult(
             text=self.text,

@@ -2,24 +2,25 @@
 
 ### Requirement: STT pipeline shall use OpenAI as primary provider
 
-The system SHALL use OpenAI STT (`gpt-4o-transcribe` by default) for normalized `ru` and `en` voice messages.
+The system SHALL use OpenAI STT (`gpt-4o-transcribe` by default) as the primary transcription provider for voice messages without requiring the user to choose a language.
 
 Configurable via: `OPENAI_STT_MODEL`, `OPENAI_STT_LANGUAGE`, `OPENAI_STT_TIMEOUT_MS`.
 
-#### Scenario: Russian or English voice recognized by OpenAI
+#### Scenario: Voice recognized by OpenAI
 
-- **WHEN** user sends Telegram voice and the normalized language is `ru` or `en`
-- **THEN** bot SHALL process the audio through OpenAI STT and process the returned text as a regular user message
+- **WHEN** user sends Telegram voice
+- **THEN** bot SHALL process the audio through OpenAI STT without forcing Telegram profile language
+- **THEN** bot SHALL process the returned text as a regular user message
 
 ### Requirement: STT pipeline shall use Aisha as fallback provider
 
-The system SHALL use Aisha STT for normalized `uz` voice messages. It SHALL NOT expose provider errors to the user.
+The system SHALL use Aisha STT as a best-effort Uzbek fallback when OpenAI STT fails. It SHALL NOT expose provider errors to the user.
 
 Configurable via: `AISHA_API_KEY`, `AISHA_BASE_URL`, `AISHA_STT_TIMEOUT_MS`, `AISHA_STT_LANGUAGE` (default: `uz`).
 
-#### Scenario: Uzbek voice recognized by Aisha
+#### Scenario: OpenAI fails and Aisha succeeds
 
-- **WHEN** user sends voice message and the normalized language is `uz`
+- **WHEN** user sends a voice message and OpenAI STT fails
 - **THEN** bot SHALL call Aisha STT and process its transcript as a regular user message
 
 #### Scenario: STT provider fails
@@ -59,3 +60,8 @@ After successful STT and assistant response generation, the voice pipeline SHALL
 
 - **WHEN** TTS synthesis or conversion fails after text has been sent
 - **THEN** bot SHALL keep the conversation alive and SHALL send a localized text notice about voice synthesis failure
+
+#### Scenario: Transcript language is uncertain
+
+- **WHEN** STT succeeds and the transcript language cannot be confidently detected
+- **THEN** bot SHALL send the text response and skip TTS without failing the conversation

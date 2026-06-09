@@ -8,6 +8,7 @@ from apps.bot.app.speech.aisha_provider import AishaSpeechProvider
 from apps.bot.app.speech.azure_provider import AzureSpeechProvider
 from apps.bot.app.speech.base import SpeechProviderError, normalize_language
 from apps.bot.app.speech.factory import create_speech_providers
+from apps.bot.app.speech.language_detection import detect_language_from_text
 from apps.bot.app.speech.openai_provider import OpenAISpeechProvider
 from apps.bot.app.speech.temp_files import cleanup_temp_file, create_temp_audio_path, ensure_ogg
 from apps.bot.app.speech.yandex_provider import YandexSpeechKitProvider
@@ -55,6 +56,34 @@ def test_factory_routes_stt_and_tts_by_language():
     assert providers.tts_for_language("uz") is providers.aisha
     assert providers.tts_for_language("ru") is providers.yandex
     assert providers.tts_for_language("en") is providers.openai
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("Привет, сколько стоит консультация?", "ru"),
+        ("Hello, how much does it cost?", "en"),
+        ("Salom, maslahat qancha turadi?", "uz"),
+        ("Ассалому алайкум, сизга раҳмат", "uz"),
+        ("12345", None),
+    ],
+)
+def test_detect_language_from_text(text, expected):
+    assert detect_language_from_text(text) == expected
+
+
+@pytest.mark.asyncio
+async def test_openai_stt_omits_language_for_auto_detection(tmp_path):
+    audio_path = tmp_path / "audio.wav"
+    audio_path.write_bytes(b"audio")
+    client = FakeHttpClient([FakeResponse(json_data={"text": "Hello"})])
+    settings = BotSettings(openai_api_key="secret", openai_stt_language="ru")
+    provider = OpenAISpeechProvider(settings=settings, client=client)
+
+    result = await provider.transcribe(str(audio_path), None)
+
+    assert result.text == "Hello"
+    assert "language" not in client.posts[0]["data"]
 
 
 @pytest.mark.asyncio

@@ -7,6 +7,7 @@ import httpx
 
 from apps.bot.app.config import BotSettings, get_settings
 from apps.bot.app.speech.base import (
+    SUPPORTED_LANGUAGES,
     SpeechProviderError,
     SpeechToTextResult,
     TextToSpeechResult,
@@ -33,15 +34,22 @@ class OpenAISpeechProvider:
         self.settings = settings or get_settings()
         self.client = client
 
-    async def transcribe(self, file_path: str, language: str) -> SpeechToTextResult:
+    async def transcribe(
+        self,
+        file_path: str,
+        language: str | None = None,
+    ) -> SpeechToTextResult:
         if not self.settings.openai_api_key:
             raise SpeechProviderError("OpenAI API key is not configured")
 
         normalized = normalize_language(language)
         data = {"model": self.settings.openai_stt_model}
-        stt_language = self.settings.openai_stt_language or normalized
-        if stt_language:
-            data["language"] = stt_language
+        if language is None:
+            pass
+        elif self.settings.openai_stt_language:
+            data["language"] = self.settings.openai_stt_language
+        elif language in SUPPORTED_LANGUAGES:
+            data["language"] = language
 
         async def post() -> httpx.Response:
             with open(file_path, "rb") as audio_file:
