@@ -8,7 +8,7 @@ from aiogram.types import CallbackQuery, Message
 from apps.bot.app.services.language_service import (
     set_preferred_language,
 )
-from apps.bot.app.services.welcome_flow import reset_thread_and_send_welcome
+from apps.bot.app.services.welcome_flow import send_welcome
 from packages.shared.utils.languages import LANGUAGE_LABELS, normalize_preferred_language
 
 logger = logging.getLogger(__name__)
@@ -32,7 +32,7 @@ async def language_selected(callback: CallbackQuery) -> None:
     if not isinstance(callback.message, Message):
         return
 
-    await reset_thread_and_send_welcome(
+    await send_welcome(
         callback.message,
         callback.from_user,
         saved_language,

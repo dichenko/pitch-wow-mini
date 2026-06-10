@@ -17,10 +17,17 @@ async def reset_thread_and_send_welcome(
     user: User,
     language: Language,
 ) -> None:
-    trace_id = str(uuid.uuid4())
     reset_user_thread(user.id)
-    thread_id = get_thread_id(user.id)
+    await send_welcome(message, user, language)
 
+
+async def send_welcome(
+    message: Message,
+    user: User,
+    language: Language,
+) -> None:
+    trace_id = str(uuid.uuid4())
+    thread_id = get_thread_id(user.id)
     welcome_text = await get_active_welcome_message(language)
     await message.answer(welcome_text)
 

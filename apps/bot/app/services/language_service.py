@@ -6,7 +6,6 @@ from sqlalchemy import select
 from apps.bot.app.db.session import async_session_factory
 from packages.shared.models.database import UserProfile
 from packages.shared.utils.languages import (
-    DEFAULT_LANGUAGE,
     LANGUAGE_LABELS,
     SUPPORTED_LANGUAGES,
     Language,
@@ -22,6 +21,8 @@ LANGUAGE_REQUIRED_TEXT: dict[Language, str] = {
     "uz": "Avval muloqot tilini tanlang.",
     "en": "Please choose your language first.",
 }
+
+
 def language_selection_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
@@ -66,6 +67,25 @@ async def upsert_user_profile(user: User) -> UserProfile:
 async def get_preferred_language(user: User) -> Language | None:
     profile = await upsert_user_profile(user)
     return normalize_preferred_language(profile.preferred_language)
+
+
+async def clear_preferred_language(user: User) -> None:
+    async with async_session_factory() as session:
+        result = await session.execute(
+            select(UserProfile).where(UserProfile.tg_id == user.id)
+        )
+        profile = result.scalar_one_or_none()
+        if profile is None:
+            profile = UserProfile(tg_id=user.id)
+            session.add(profile)
+
+        profile.preferred_language = None
+        profile.first_name = user.first_name
+        profile.last_name = user.last_name
+        profile.username = user.username
+        profile.language_code = user.language_code
+
+        await session.commit()
 
 
 async def require_preferred_language(message: Message) -> Language | None:
