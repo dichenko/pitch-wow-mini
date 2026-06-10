@@ -108,8 +108,9 @@ async def test_voice_pipeline_sends_text_before_tts_fallback(monkeypatch, tmp_pa
         ),
     )
 
-    async def process_user_text(message, user_text):
+    async def process_user_text(message, user_text, response_language=None):
         assert user_text == "распознанный текст"
+        assert response_language == "ru"
         await message.answer("текстовый ответ")
         return "текстовый ответ"
 
@@ -172,8 +173,9 @@ async def test_voice_pipeline_routes_tts_by_detected_transcript_language(
         ),
     )
 
-    async def process_user_text(message, user_text):
+    async def process_user_text(message, user_text, response_language=None):
         assert user_text == transcript
+        assert response_language == expected_language
         await message.answer("text response")
         return "text response"
 
@@ -216,7 +218,8 @@ async def test_voice_pipeline_skips_tts_when_transcript_language_uncertain(
         ),
     )
 
-    async def process_user_text(message, user_text):
+    async def process_user_text(message, user_text, response_language=None):
+        assert response_language is None
         await message.answer("text response")
         return "text response"
 
@@ -227,6 +230,52 @@ async def test_voice_pipeline_skips_tts_when_transcript_language_uncertain(
 
     assert routed_languages == []
     assert message.answers == ["text response"]
+    assert message.voice_answers == []
+
+
+@pytest.mark.asyncio
+async def test_voice_pipeline_skips_tts_when_response_language_differs(
+    monkeypatch,
+    tmp_path,
+):
+    paths = iter([tmp_path / "input.ogg", tmp_path / "normalized.wav"])
+    stt_provider = FakeSttProvider("Salom, maslahat qancha turadi?")
+    routed_languages = []
+
+    monkeypatch.setattr(voice_module, "settings", SimpleNamespace(
+        voice_enabled=True,
+        voice_max_audio_size_mb=25,
+        voice_max_duration_sec=120,
+    ))
+    monkeypatch.setattr(voice_module, "create_temp_audio_path", lambda suffix: next(paths))
+    monkeypatch.setattr(voice_module, "_normalize_for_stt", _write_normalized)
+    monkeypatch.setattr(voice_module, "_probe_duration", _short_duration)
+    monkeypatch.setattr(voice_module, "get_tts_prompt", _empty_tts_prompt)
+    monkeypatch.setattr(
+        voice_module,
+        "create_speech_providers",
+        lambda settings: SimpleNamespace(
+            openai=stt_provider,
+            aisha=FakeSttProvider("salom"),
+            tts_for_language=lambda language: routed_languages.append(language),
+        ),
+    )
+
+    async def process_user_text(message, user_text, response_language=None):
+        assert response_language == "uz"
+        await message.answer("Спасибо, я отвечу по-русски.")
+        return "Спасибо, я отвечу по-русски."
+
+    monkeypatch.setattr(message_module, "process_user_text", process_user_text)
+
+    message = FakeMessage()
+    await voice_module.handle_voice(message)
+
+    assert routed_languages == []
+    assert message.answers == [
+        "Спасибо, я отвечу по-русски.",
+        "Javobni matn shaklida tayyorladim, lekin hozir uni ovoz bilan yubora olmadim.",
+    ]
     assert message.voice_answers == []
 
 

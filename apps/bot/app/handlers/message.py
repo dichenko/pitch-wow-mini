@@ -7,7 +7,7 @@ import uuid
 from aiogram import Router
 from aiogram.filters import Command
 from aiogram.types import Message
-from langchain_core.messages import HumanMessage, ToolMessage
+from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 
 from apps.bot.app.agent.agent import create_agent, get_thread_id
 from apps.bot.app.agent.prompt_assembler import assemble_prompt
@@ -21,6 +21,7 @@ from apps.bot.app.services.history_service import (
 )
 from apps.bot.app.services.settings_service import get_llm_history_messages
 from apps.bot.app.services.tool_log_service import log_tool_call
+from apps.bot.app.speech import detect_language_from_text
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -32,10 +33,18 @@ async def handle_message(message: Message) -> None:
     if not message.from_user or not message.text:
         return
 
-    await process_user_text(message=message, user_text=message.text)
+    await process_user_text(
+        message=message,
+        user_text=message.text,
+        response_language=detect_language_from_text(message.text),
+    )
 
 
-async def process_user_text(message: Message, user_text: str) -> str | None:
+async def process_user_text(
+    message: Message,
+    user_text: str,
+    response_language: str | None = None,
+) -> str | None:
     if not message.from_user or not user_text:
         return None
 
@@ -71,6 +80,8 @@ async def process_user_text(message: Message, user_text: str) -> str | None:
         # Add telegram user info to metadata for LangSmith
         prompt_meta["telegram_user_id"] = user.id
         prompt_meta["telegram_username"] = user.username or ""
+        if response_language:
+            prompt_meta["response_language"] = response_language
 
         # Create agent
         agent = await create_agent(
@@ -85,8 +96,14 @@ async def process_user_text(message: Message, user_text: str) -> str | None:
         }
 
         # Invoke agent with config
+        language_instruction = _response_language_instruction(response_language)
+        input_messages = [*history_messages]
+        if language_instruction:
+            input_messages.append(SystemMessage(content=language_instruction))
+        input_messages.append(HumanMessage(content=user_text))
+
         response = await agent.ainvoke(
-            {"messages": [*history_messages, HumanMessage(content=user_text)]},
+            {"messages": input_messages},
             config=config,
         )
 
@@ -135,3 +152,22 @@ async def process_user_text(message: Message, user_text: str) -> str | None:
             "Извините, произошла ошибка при обработке вашего сообщения. Попробуйте позже."
         )
         return None
+
+
+def _response_language_instruction(language: str | None) -> str | None:
+    if language == "uz":
+        return (
+            "The user's current message is Uzbek. Reply only in Uzbek Latin script. "
+            "Do not switch to Russian or English unless the user explicitly asks."
+        )
+    if language == "ru":
+        return (
+            "The user's current message is Russian. Reply only in Russian. "
+            "Do not switch to Uzbek or English unless the user explicitly asks."
+        )
+    if language == "en":
+        return (
+            "The user's current message is English. Reply only in English. "
+            "Do not switch to Russian or Uzbek unless the user explicitly asks."
+        )
+    return None

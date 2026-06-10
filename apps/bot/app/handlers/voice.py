@@ -104,6 +104,7 @@ async def handle_voice(message: Message) -> None:
         response_text = await process_user_text(
             message=message,
             user_text=stt_result.text,
+            response_language=detected_language,
         )
         if not response_text:
             return
@@ -116,6 +117,18 @@ async def handle_voice(message: Message) -> None:
             return
 
         try:
+            response_language = detect_language_from_text(response_text)
+            if response_language is not None and response_language != detected_language:
+                logger.warning(
+                    "Skipping TTS because response language differs from transcript "
+                    "trace_id=%s transcript_language=%s response_language=%s",
+                    trace_id,
+                    detected_language,
+                    response_language,
+                )
+                await message.answer(TTS_FALLBACK_MESSAGES[detected_language])
+                return
+
             tts_prompt = (await get_tts_prompt(detected_language)).strip() or None
             tts_provider = providers.tts_for_language(detected_language)
             tts_result = await tts_provider.synthesize(
