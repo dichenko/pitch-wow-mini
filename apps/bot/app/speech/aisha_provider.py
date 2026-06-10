@@ -40,8 +40,8 @@ class AishaSpeechProvider:
                 files = {"audio": ("audio.wav", audio_file, "audio/wav")}
                 data = {"language": self.settings.aisha_stt_language or normalized}
                 return await self._post(
-                    f"{self.settings.aisha_base_url.rstrip('/')}/stt/transcribe",
-                    headers={"Authorization": f"Bearer {self.settings.aisha_api_key}"},
+                    f"{self.settings.aisha_base_url.rstrip('/')}/api/v1/stt/post/",
+                    headers={"X-Api-Key": self.settings.aisha_api_key},
                     files=files,
                     data=data,
                     timeout=self.settings.aisha_stt_timeout_ms / 1000.0,
