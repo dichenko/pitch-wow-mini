@@ -110,7 +110,11 @@ class PromptVersion(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "kind IN ('system_prompt', 'tools_instruction', 'censor_prompt', 'welcome_message')",
+            "kind IN ("
+            "'system_prompt', 'tools_instruction', 'censor_prompt', "
+            "'welcome_message', 'welcome_message_ru', 'welcome_message_uz', "
+            "'welcome_message_en'"
+            ")",
             name="check_prompt_kind",
         ),
         UniqueConstraint("kind", "version_number", name="uq_prompt_kind_version"),
@@ -121,6 +125,31 @@ class PromptVersion(Base):
             unique=True,
             postgresql_where="is_active = true",
         ),
+    )
+
+
+class UserProfile(Base):
+    __tablename__ = "user_profiles"
+
+    tg_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    preferred_language: Mapped[str | None] = mapped_column(Text, nullable=True)
+    first_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    username: Mapped[str | None] = mapped_column(Text, nullable=True)
+    language_code: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "preferred_language IS NULL OR preferred_language IN ('ru', 'uz', 'en')",
+            name="check_user_profiles_preferred_language",
+        ),
+        Index("ix_user_profiles_preferred_language", "preferred_language"),
     )
 
 

@@ -66,7 +66,11 @@ def upgrade() -> None:
         sa.Column("restored_from_version_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.CheckConstraint(
-            "kind IN ('system_prompt', 'tools_instruction', 'censor_prompt', 'welcome_message')",
+            "kind IN ("
+            "'system_prompt', 'tools_instruction', 'censor_prompt', "
+            "'welcome_message', 'welcome_message_ru', 'welcome_message_uz', "
+            "'welcome_message_en'"
+            ")",
             name="check_prompt_kind",
         ),
         sa.UniqueConstraint("kind", "version_number", name="uq_prompt_kind_version"),
@@ -116,6 +120,28 @@ def upgrade() -> None:
     )
     op.create_index("ix_admin_notifications_trace_id", "admin_notifications", ["trace_id"])
     op.create_index("ix_admin_notifications_created_at", "admin_notifications", ["created_at"])
+
+    # user_profiles
+    op.create_table(
+        "user_profiles",
+        sa.Column("tg_id", sa.BigInteger(), primary_key=True),
+        sa.Column("preferred_language", sa.Text(), nullable=True),
+        sa.Column("first_name", sa.Text(), nullable=True),
+        sa.Column("last_name", sa.Text(), nullable=True),
+        sa.Column("username", sa.Text(), nullable=True),
+        sa.Column("language_code", sa.Text(), nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.CheckConstraint(
+            "preferred_language IS NULL OR preferred_language IN ('ru', 'uz', 'en')",
+            name="check_user_profiles_preferred_language",
+        ),
+    )
+    op.create_index(
+        "ix_user_profiles_preferred_language",
+        "user_profiles",
+        ["preferred_language"],
+    )
 
     # censor_runs
     op.create_table(
@@ -167,6 +193,7 @@ def downgrade() -> None:
     op.drop_table("tool_call_logs")
     op.drop_table("app_settings")
     op.drop_table("censor_runs")
+    op.drop_table("user_profiles")
     op.drop_table("admin_notifications")
     op.drop_table("admin_audit_log")
     op.drop_table("prompt_versions")

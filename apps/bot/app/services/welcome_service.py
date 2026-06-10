@@ -1,32 +1,77 @@
-"""Welcome message service — retrieves active welcome and persists to history."""
+"""Welcome message service — retrieves localized welcome and persists to history."""
 
 import logging
-import uuid
 
 from sqlalchemy import select
 
 from apps.bot.app.db.session import async_session_factory
+from apps.bot.app.services.language_service import DEFAULT_LANGUAGE, Language, normalize_preferred_language
 from apps.bot.app.services.history_service import save_dialogue_turn_best_effort
 from packages.shared.models.database import PromptVersion
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_WELCOME = (
-    "Привет! Я AI-ассистент. Чем могу помочь?\n\n"
-    "Для администраторов: используйте /admin для входа в панель управления."
-)
+WELCOME_PROMPT_KINDS: dict[Language, str] = {
+    "ru": "welcome_message_ru",
+    "uz": "welcome_message_uz",
+    "en": "welcome_message_en",
+}
+
+DEFAULT_WELCOME_MESSAGES: dict[Language, str] = {
+    "ru": (
+        "Привет! Я AI-ассистент. Чем могу помочь?\n\n"
+        "Для администраторов: используйте /admin для входа в панель управления."
+    ),
+    "uz": (
+        "Salom! Men AI-assistentman. Sizga qanday yordam bera olaman?\n\n"
+        "Administratorlar uchun: boshqaruv paneliga kirish uchun /admin buyrug'idan foydalaning."
+    ),
+    "en": (
+        "Hello! I am an AI assistant. How can I help?\n\n"
+        "For administrators: use /admin to sign in to the admin panel."
+    ),
+}
+
+DEFAULT_WELCOME = DEFAULT_WELCOME_MESSAGES[DEFAULT_LANGUAGE]
 
 
-async def get_active_welcome_message() -> str | None:
-    """Return the active welcome message content from DB."""
+def get_welcome_prompt_kind(language: str | None) -> str:
+    normalized = normalize_preferred_language(language) or DEFAULT_LANGUAGE
+    return WELCOME_PROMPT_KINDS[normalized]
+
+
+def get_default_welcome_message(language: str | None) -> str:
+    normalized = normalize_preferred_language(language) or DEFAULT_LANGUAGE
+    return DEFAULT_WELCOME_MESSAGES[normalized]
+
+
+async def get_active_welcome_message(language: str | None = None) -> str:
+    """Return active localized welcome content from DB or fallback default."""
+    normalized = normalize_preferred_language(language) or DEFAULT_LANGUAGE
+    kind = WELCOME_PROMPT_KINDS[normalized]
     async with async_session_factory() as session:
         result = await session.execute(
             select(PromptVersion.content).where(
-                PromptVersion.kind == "welcome_message",
+                PromptVersion.kind == kind,
                 PromptVersion.is_active == True,
             )
         )
-        return result.scalar_one_or_none()
+        content = result.scalar_one_or_none()
+        if content:
+            return content
+
+        if normalized == "ru":
+            result = await session.execute(
+                select(PromptVersion.content).where(
+                    PromptVersion.kind == "welcome_message",
+                    PromptVersion.is_active == True,
+                )
+            )
+            legacy_content = result.scalar_one_or_none()
+            if legacy_content:
+                return legacy_content
+
+        return DEFAULT_WELCOME_MESSAGES[normalized]
 
 
 async def persist_welcome_to_history(

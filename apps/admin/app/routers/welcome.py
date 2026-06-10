@@ -1,8 +1,8 @@
-"""Welcome message management router."""
+"""Localized welcome message management router."""
 
 import os
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
@@ -16,6 +16,11 @@ from apps.admin.app.services.session import (
     verify_csrf,
 )
 from apps.bot.app.services.audit_service import log_audit_event
+from apps.bot.app.services.language_service import LANGUAGE_LABELS, normalize_preferred_language
+from apps.bot.app.services.welcome_service import (
+    DEFAULT_WELCOME_MESSAGES,
+    WELCOME_PROMPT_KINDS,
+)
 from packages.shared.models.database import PromptVersion
 
 router = APIRouter()
@@ -29,32 +34,44 @@ async def view_welcome(request: Request):
     if not admin:
         return RedirectResponse(url="/admin/login?token=", status_code=303)
 
+    welcome_languages = []
     async with async_session_factory() as session:
-        result = await session.execute(
-            select(PromptVersion).where(
-                PromptVersion.kind == "welcome_message", PromptVersion.is_active == True
+        for language, kind in WELCOME_PROMPT_KINDS.items():
+            result = await session.execute(
+                select(PromptVersion).where(
+                    PromptVersion.kind == kind,
+                    PromptVersion.is_active == True,
+                )
             )
-        )
-        active = result.scalar_one_or_none()
+            active = result.scalar_one_or_none()
 
-        result = await session.execute(
-            select(PromptVersion)
-            .where(PromptVersion.kind == "welcome_message")
-            .order_by(PromptVersion.version_number.desc())
-            .limit(4)
-        )
-        versions = list(result.scalars().all())
+            result = await session.execute(
+                select(PromptVersion)
+                .where(PromptVersion.kind == kind)
+                .order_by(PromptVersion.version_number.desc())
+                .limit(4)
+            )
+            versions = list(result.scalars().all())
+
+            welcome_languages.append(
+                {
+                    "code": language,
+                    "label": LANGUAGE_LABELS[language],
+                    "kind": kind,
+                    "active": active,
+                    "versions": versions,
+                    "default_content": DEFAULT_WELCOME_MESSAGES[language],
+                }
+            )
 
     csrf_token = get_or_create_csrf_token(request)
     response = templates.TemplateResponse(
-        "prompt/edit.html",
+        "prompt/welcome_localized.html",
         {
             "request": request,
             "admin": admin,
-            "kind": "welcome_message",
-            "title": "Welcome Message",
-            "active": active,
-            "versions": versions,
+            "title": "Welcome Messages",
+            "welcome_languages": welcome_languages,
             "page_url": "/admin/welcome",
             "csrf_token": csrf_token,
         },
@@ -64,13 +81,23 @@ async def view_welcome(request: Request):
 
 
 @router.post("/admin/welcome/save")
-async def save_welcome(request: Request, content: str = Form(...), change_note: str = Form(""), _csrf=Depends(verify_csrf)):
+async def save_welcome(
+    request: Request,
+    language: str = Form(...),
+    content: str = Form(...),
+    change_note: str = Form(""),
+    _csrf=Depends(verify_csrf),
+):
     admin = require_role(request, "write")
+    normalized = normalize_preferred_language(language)
+    if normalized is None:
+        raise HTTPException(status_code=400, detail="Unsupported language")
 
     from apps.bot.app.services.prompt_service import create_prompt_version
 
+    kind = WELCOME_PROMPT_KINDS[normalized]
     new_version = await create_prompt_version(
-        kind="welcome_message",
+        kind=kind,
         content=content,
         admin_tg_id=admin["tg_id"],
         change_note=change_note or None,
@@ -84,20 +111,34 @@ async def save_welcome(request: Request, content: str = Form(...), change_note: 
             action="prompt.created",
             entity_type="prompt_version",
             entity_id=new_version.id,
-            metadata={"kind": "welcome_message", "version": new_version.version_number},
+            metadata={
+                "kind": kind,
+                "language": normalized,
+                "version": new_version.version_number,
+            },
         )
 
     return RedirectResponse(url="/admin/welcome", status_code=303)
 
 
-@router.post("/admin/welcome/restore/{version_id}")
-async def restore_welcome(request: Request, version_id: str, csrf_token: str = Form(""), _csrf=Depends(verify_csrf)):
+@router.post("/admin/welcome/restore/{language}/{version_id}")
+async def restore_welcome(
+    request: Request,
+    language: str,
+    version_id: str,
+    csrf_token: str = Form(""),
+    _csrf=Depends(verify_csrf),
+):
     admin = require_role(request, "write")
+    normalized = normalize_preferred_language(language)
+    if normalized is None:
+        raise HTTPException(status_code=400, detail="Unsupported language")
 
     from apps.bot.app.services.prompt_service import restore_prompt_version
 
+    kind = WELCOME_PROMPT_KINDS[normalized]
     new_version = await restore_prompt_version(
-        kind="welcome_message",
+        kind=kind,
         source_version_id=version_id,
         admin_tg_id=admin["tg_id"],
     )
@@ -110,7 +151,11 @@ async def restore_welcome(request: Request, version_id: str, csrf_token: str = F
             action="prompt.restored",
             entity_type="prompt_version",
             entity_id=new_version.id,
-            metadata={"kind": "welcome_message", "version": new_version.version_number},
+            metadata={
+                "kind": kind,
+                "language": normalized,
+                "version": new_version.version_number,
+            },
         )
 
     return RedirectResponse(url="/admin/welcome", status_code=303)

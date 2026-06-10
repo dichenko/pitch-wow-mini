@@ -19,13 +19,19 @@ from apps.bot.app.services.history_service import (
     load_dialogue_history,
     save_dialogue_turn_best_effort,
 )
+from apps.bot.app.services.language_service import require_preferred_language
 from apps.bot.app.services.settings_service import get_llm_history_messages
 from apps.bot.app.services.tool_log_service import log_tool_call
-from apps.bot.app.speech import detect_language_from_text
 
 logger = logging.getLogger(__name__)
 router = Router()
 settings = get_settings()
+
+PROCESSING_ERROR_MESSAGES = {
+    "ru": "Извините, произошла ошибка при обработке вашего сообщения. Попробуйте позже.",
+    "uz": "Kechirasiz, xabaringizni qayta ishlashda xatolik yuz berdi. Keyinroq urinib ko'ring.",
+    "en": "Sorry, an error occurred while processing your message. Please try again later.",
+}
 
 
 @router.message(~Command("start", "admin", "restart"))
@@ -33,10 +39,14 @@ async def handle_message(message: Message) -> None:
     if not message.from_user or not message.text:
         return
 
+    language = await require_preferred_language(message)
+    if language is None:
+        return
+
     await process_user_text(
         message=message,
         user_text=message.text,
-        response_language=detect_language_from_text(message.text),
+        response_language=language,
     )
 
 
@@ -149,7 +159,10 @@ async def process_user_text(
     except Exception as e:
         logger.error(f"Agent error trace_id={trace_id}: {e}", exc_info=True)
         await message.answer(
-            "Извините, произошла ошибка при обработке вашего сообщения. Попробуйте позже."
+            PROCESSING_ERROR_MESSAGES.get(
+                response_language or "ru",
+                PROCESSING_ERROR_MESSAGES["ru"],
+            )
         )
         return None
 

@@ -1,4 +1,4 @@
-"""Voice message handler with multilingual STT and best-effort TTS."""
+"""Voice message handler with profile-language STT and best-effort TTS."""
 
 import asyncio
 import logging
@@ -9,12 +9,9 @@ from aiogram import Router
 from aiogram.types import FSInputFile, Message
 
 from apps.bot.app.config import get_settings
+from apps.bot.app.services.language_service import require_preferred_language
 from apps.bot.app.services.settings_service import get_tts_prompt
-from apps.bot.app.speech import (
-    SpeechProviderError,
-    create_speech_providers,
-    detect_language_from_text,
-)
+from apps.bot.app.speech import SpeechProviderError, create_speech_providers
 from apps.bot.app.speech.temp_files import (
     cleanup_temp_file,
     create_temp_audio_path,
@@ -32,16 +29,42 @@ TTS_FALLBACK_MESSAGES = {
     "en": "I prepared the text answer, but could not send it as voice right now.",
 }
 
+VOICE_DISABLED_MESSAGES = {
+    "ru": "Голосовые сообщения отключены. Пожалуйста, отправьте ваше сообщение текстом.",
+    "uz": "Ovozli xabarlar o'chirilgan. Iltimos, xabaringizni matn shaklida yuboring.",
+    "en": "Voice messages are disabled. Please send your message as text.",
+}
+
+FILE_TOO_LARGE_MESSAGES = {
+    "ru": "Файл слишком большой (макс. {max_size} МБ). Пожалуйста, отправьте более короткое голосовое сообщение.",
+    "uz": "Fayl juda katta (maks. {max_size} MB). Iltimos, qisqaroq ovozli xabar yuboring.",
+    "en": "The file is too large (max. {max_size} MB). Please send a shorter voice message.",
+}
+
+DURATION_TOO_LONG_MESSAGES = {
+    "ru": "Голосовое сообщение слишком длинное (макс. {max_duration} сек). Пожалуйста, отправьте более короткое сообщение.",
+    "uz": "Ovozli xabar juda uzun (maks. {max_duration} soniya). Iltimos, qisqaroq xabar yuboring.",
+    "en": "The voice message is too long (max. {max_duration} seconds). Please send a shorter message.",
+}
+
+VOICE_RECOGNITION_ERROR_MESSAGES = {
+    "ru": "Не удалось распознать голосовое сообщение, пожалуйста, отправьте текстом.",
+    "uz": "Ovozli xabarni taniy olmadim, iltimos, matn shaklida yuboring.",
+    "en": "Could not recognize the voice message. Please send it as text.",
+}
+
 
 @router.message(lambda m: m.voice or m.audio)
 async def handle_voice(message: Message) -> None:
-    if not settings.voice_enabled:
-        await message.answer(
-            "Голосовые сообщения отключены. Пожалуйста, отправьте ваше сообщение текстом."
-        )
+    if not message.from_user:
         return
 
-    if not message.from_user:
+    language = await require_preferred_language(message)
+    if language is None:
+        return
+
+    if not settings.voice_enabled:
+        await message.answer(VOICE_DISABLED_MESSAGES[language])
         return
 
     trace_id = str(uuid.uuid4())
@@ -49,7 +72,6 @@ async def handle_voice(message: Message) -> None:
     if not media:
         return
 
-    detected_language: str | None = None
     input_path: Path | None = None
     normalized_path: Path | None = None
     tts_original_path: Path | None = None
@@ -58,8 +80,9 @@ async def handle_voice(message: Message) -> None:
     file_size_mb = media.file_size / (1024 * 1024) if media.file_size else 0
     if file_size_mb > settings.voice_max_audio_size_mb:
         await message.answer(
-            f"Файл слишком большой (макс. {settings.voice_max_audio_size_mb} МБ). "
-            "Пожалуйста, отправьте более короткое голосовое сообщение."
+            FILE_TOO_LARGE_MESSAGES[language].format(
+                max_size=settings.voice_max_audio_size_mb
+            )
         )
         return
 
@@ -78,62 +101,35 @@ async def handle_voice(message: Message) -> None:
         duration = await _probe_duration(normalized_path)
         if duration > settings.voice_max_duration_sec:
             await message.answer(
-                f"Голосовое сообщение слишком длинное (макс. {settings.voice_max_duration_sec} сек). "
-                "Пожалуйста, отправьте более короткое сообщение."
+                DURATION_TOO_LONG_MESSAGES[language].format(
+                    max_duration=settings.voice_max_duration_sec
+                )
             )
             return
 
         providers = create_speech_providers(settings)
-        try:
-            stt_result = await providers.openai.transcribe(str(normalized_path), None)
-        except SpeechProviderError as exc:
-            logger.warning(
-                "OpenAI auto STT failed trace_id=%s error=%s; trying Aisha Uzbek fallback",
-                trace_id,
-                exc,
-            )
-            stt_result = await providers.aisha.transcribe(str(normalized_path), "uz")
+        stt_provider = providers.stt_for_language(language)
+        stt_result = await stt_provider.transcribe(str(normalized_path), language)
 
         if not stt_result.text.strip():
             raise SpeechProviderError("STT returned empty text")
-
-        detected_language = detect_language_from_text(stt_result.text)
 
         from apps.bot.app.handlers.message import process_user_text
 
         response_text = await process_user_text(
             message=message,
             user_text=stt_result.text,
-            response_language=detected_language,
+            response_language=language,
         )
         if not response_text:
             return
 
-        if detected_language is None:
-            logger.info(
-                "Skipping TTS because transcript language is uncertain trace_id=%s",
-                trace_id,
-            )
-            return
-
         try:
-            response_language = detect_language_from_text(response_text)
-            if response_language is not None and response_language != detected_language:
-                logger.warning(
-                    "Skipping TTS because response language differs from transcript "
-                    "trace_id=%s transcript_language=%s response_language=%s",
-                    trace_id,
-                    detected_language,
-                    response_language,
-                )
-                await message.answer(TTS_FALLBACK_MESSAGES[detected_language])
-                return
-
-            tts_prompt = (await get_tts_prompt(detected_language)).strip() or None
-            tts_provider = providers.tts_for_language(detected_language)
+            tts_prompt = (await get_tts_prompt(language)).strip() or None
+            tts_provider = providers.tts_for_language(language)
             tts_result = await tts_provider.synthesize(
                 response_text,
-                detected_language,
+                language,
                 instructions=tts_prompt,
             )
             tts_original_path = Path(tts_result.file_path)
@@ -145,30 +141,28 @@ async def handle_voice(message: Message) -> None:
                 trace_id,
                 tts_result.provider,
                 tts_result.model,
-                detected_language,
+                language,
                 tts_result.format,
             )
         except Exception as exc:
             logger.error(
                 "TTS failed trace_id=%s language=%s error=%s",
                 trace_id,
-                detected_language,
+                language,
                 exc,
                 exc_info=True,
             )
-            await message.answer(TTS_FALLBACK_MESSAGES[detected_language])
+            await message.answer(TTS_FALLBACK_MESSAGES[language])
 
     except Exception as exc:
         logger.error(
             "Voice processing error trace_id=%s language=%s error=%s",
             trace_id,
-            detected_language or "unknown",
+            language,
             exc,
             exc_info=True,
         )
-        await message.answer(
-            "Не удалось распознать голосовое сообщение, пожалуйста, отправьте текстом"
-        )
+        await message.answer(VOICE_RECOGNITION_ERROR_MESSAGES[language])
     finally:
         await cleanup_temp_file(input_path, reason="telegram_voice_input_cleanup")
         await cleanup_temp_file(normalized_path, reason="telegram_voice_normalized_cleanup")

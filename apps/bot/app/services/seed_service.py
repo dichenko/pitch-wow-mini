@@ -1,10 +1,11 @@
-"""Seed service — inserts default prompts on first startup."""
+"""Seed service — inserts missing default prompts on startup."""
 
 import logging
 
 from sqlalchemy import select, func
 
 from apps.bot.app.db.session import async_session_factory
+from apps.bot.app.services.welcome_service import DEFAULT_WELCOME_MESSAGES, WELCOME_PROMPT_KINDS
 from packages.shared.models.database import AppSetting, PromptVersion
 
 logger = logging.getLogger(__name__)
@@ -30,71 +31,49 @@ Rules:
 - Do not add information that was not in the original response
 - Return the edited response directly, without explanations"""
 
-DEFAULT_WELCOME_MESSAGE = (
-    "Привет! Я AI-ассистент. Чем могу помочь?\n\n"
-    "Для администраторов: используйте /admin для входа в панель управления."
-)
-
-
 async def seed_defaults() -> None:
-    """Seed default prompt versions if the prompt_versions table is empty."""
+    """Seed default prompt versions and settings that are not present yet."""
     async with async_session_factory() as session:
-        result = await session.execute(select(func.count()).select_from(PromptVersion))
-        count = result.scalar_one()
-
-        if count > 0:
-            logger.debug("Prompt versions already exist, skipping seed")
-            return
-
-        # Seed system prompt
-        session.add(
-            PromptVersion(
-                kind="system_prompt",
-                version_number=1,
-                content=DEFAULT_SYSTEM_PROMPT,
-                is_active=True,
-                created_by_username="system",
-                change_note="Initial seed",
-            )
+        await _seed_prompt_if_missing(
+            session=session,
+            kind="system_prompt",
+            content=DEFAULT_SYSTEM_PROMPT,
+        )
+        await _seed_prompt_if_missing(
+            session=session,
+            kind="tools_instruction",
+            content=DEFAULT_TOOLS_INSTRUCTION,
+        )
+        await _seed_prompt_if_missing(
+            session=session,
+            kind="censor_prompt",
+            content=DEFAULT_CENSOR_PROMPT,
         )
 
-        # Seed tools instruction
-        session.add(
-            PromptVersion(
-                kind="tools_instruction",
-                version_number=1,
-                content=DEFAULT_TOOLS_INSTRUCTION,
-                is_active=True,
-                created_by_username="system",
-                change_note="Initial seed",
-            )
+        legacy_welcome = await _get_legacy_welcome_content(session)
+        await _seed_prompt_if_missing(
+            session=session,
+            kind=WELCOME_PROMPT_KINDS["ru"],
+            content=legacy_welcome or DEFAULT_WELCOME_MESSAGES["ru"],
+            change_note=(
+                "Initial localized seed from legacy welcome_message"
+                if legacy_welcome
+                else "Initial localized seed"
+            ),
+        )
+        await _seed_prompt_if_missing(
+            session=session,
+            kind=WELCOME_PROMPT_KINDS["uz"],
+            content=DEFAULT_WELCOME_MESSAGES["uz"],
+            change_note="Initial localized seed",
+        )
+        await _seed_prompt_if_missing(
+            session=session,
+            kind=WELCOME_PROMPT_KINDS["en"],
+            content=DEFAULT_WELCOME_MESSAGES["en"],
+            change_note="Initial localized seed",
         )
 
-        # Seed censor prompt
-        session.add(
-            PromptVersion(
-                kind="censor_prompt",
-                version_number=1,
-                content=DEFAULT_CENSOR_PROMPT,
-                is_active=True,
-                created_by_username="system",
-                change_note="Initial seed",
-            )
-        )
-
-        # Seed welcome message
-        session.add(
-            PromptVersion(
-                kind="welcome_message",
-                version_number=1,
-                content=DEFAULT_WELCOME_MESSAGE,
-                is_active=True,
-                created_by_username="system",
-                change_note="Initial seed",
-            )
-        )
-
-        # Seed default censor_enabled setting
         result = await session.execute(
             select(AppSetting).where(AppSetting.key == "censor_enabled")
         )
@@ -102,4 +81,39 @@ async def seed_defaults() -> None:
             session.add(AppSetting(key="censor_enabled", value="false"))
 
         await session.commit()
-        logger.info("Default prompts and settings seeded successfully")
+        logger.info("Missing default prompts and settings seeded successfully")
+
+
+async def _seed_prompt_if_missing(
+    session,
+    kind: str,
+    content: str,
+    change_note: str = "Initial seed",
+) -> None:
+    result = await session.execute(
+        select(func.count()).select_from(PromptVersion).where(PromptVersion.kind == kind)
+    )
+    if result.scalar_one() > 0:
+        logger.debug("Prompt kind %s already exists, skipping seed", kind)
+        return
+
+    session.add(
+        PromptVersion(
+            kind=kind,
+            version_number=1,
+            content=content,
+            is_active=True,
+            created_by_username="system",
+            change_note=change_note,
+        )
+    )
+
+
+async def _get_legacy_welcome_content(session) -> str | None:
+    result = await session.execute(
+        select(PromptVersion.content)
+        .where(PromptVersion.kind == "welcome_message", PromptVersion.is_active == True)
+        .order_by(PromptVersion.version_number.desc())
+        .limit(1)
+    )
+    return result.scalar_one_or_none()

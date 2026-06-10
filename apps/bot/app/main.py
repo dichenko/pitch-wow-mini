@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from apps.bot.app.bot_instance import bot
 from apps.bot.app.config import get_settings
 from apps.bot.app.filters import is_private_message
-from apps.bot.app.handlers import admin, message, restart, start, voice
+from apps.bot.app.handlers import admin, language, message, restart, start, voice
 from apps.bot.app.services.admin_service import bootstrap_root_admin
 from apps.bot.app.services.seed_service import seed_defaults
 from packages.shared.utils.logging import setup_logging
@@ -23,6 +23,7 @@ dp.message.filter(is_private_message)
 
 # Register handlers
 dp.include_router(start.router)
+dp.include_router(language.router)
 dp.include_router(admin.router)
 dp.include_router(restart.router)
 dp.include_router(voice.router)

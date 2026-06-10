@@ -132,9 +132,13 @@ class TestPromptKinds:
             "tools_instruction",
             "censor_prompt",
             "welcome_message",
+            "welcome_message_ru",
+            "welcome_message_uz",
+            "welcome_message_en",
         }
 
         assert "welcome_message" in valid_kinds
+        assert {"welcome_message_ru", "welcome_message_uz", "welcome_message_en"}.issubset(valid_kinds)
 
 
 class TestCensorFallback:

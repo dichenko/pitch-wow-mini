@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<h1>{{ title }}</h1>
+
+{% for item in welcome_languages %}
+<div class="card">
+    <h3>{{ item.label }} {% if item.active %}(v{{ item.active.version_number }}){% endif %}</h3>
+    {% if item.active %}
+    <p class="version-meta">Saved by {{ item.active.created_by_username or 'system' }} on {{ item.active.created_at.strftime('%Y-%m-%d %H:%M') if item.active.created_at else 'N/A' }}</p>
+    {% else %}
+    <p class="version-meta">No active version. The bot will use the built-in fallback.</p>
+    {% endif %}
+
+    {% if admin.role in ('write', 'superadmin') %}
+    <form method="POST" action="{{ page_url }}/save">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="language" value="{{ item.code }}">
+        <div class="form-group">
+            <textarea name="content">{{ item.active.content if item.active else item.default_content }}</textarea>
+        </div>
+        <div class="form-group">
+            <label>Change note (optional)</label>
+            <input type="text" name="change_note" style="width: 100%;" placeholder="What changed?">
+        </div>
+        <button type="submit" class="btn">Save {{ item.label }}</button>
+    </form>
+    {% else %}
+    <div class="form-group">
+        <textarea readonly>{{ item.active.content if item.active else item.default_content }}</textarea>
+    </div>
+    <p><em>Read-only access. Only write and superadmin roles can edit.</em></p>
+    {% endif %}
+
+    {% if item.versions %}
+    <div class="version-list">
+        <h3>Version History</h3>
+        {% for v in item.versions %}
+        {% if not v.is_active %}
+        <div class="version-item">
+            <div>
+                <strong>v{{ v.version_number }}</strong>
+                <span class="version-meta">by {{ v.created_by_username or 'system' }} on {{ v.created_at.strftime('%Y-%m-%d %H:%M') if v.created_at else 'N/A' }}</span>
+                {% if v.change_note %}<br><small>{{ v.change_note }}</small>{% endif %}
+            </div>
+            {% if admin.role in ('write', 'superadmin') %}
+            <form method="POST" action="{{ page_url }}/restore/{{ item.code }}/{{ v.id }}" style="margin: 0;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <button type="submit" class="btn btn-sm">Restore</button>
+            </form>
+            {% endif %}
+        </div>
+        {% endif %}
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>
+{% endfor %}
+{% endblock %}

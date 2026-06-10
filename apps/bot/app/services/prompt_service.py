@@ -94,6 +94,10 @@ async def restore_prompt_version(
         source = result.scalar_one_or_none()
         if not source:
             raise ValueError(f"Source version {source_version_id} not found")
+        if source.kind != kind:
+            raise ValueError(
+                f"Source version {source_version_id} belongs to {source.kind}, not {kind}"
+            )
 
         # Get next version number
         result = await session.execute(
