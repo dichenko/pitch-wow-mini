@@ -5,6 +5,7 @@ from typing import Any
 from urllib.parse import urljoin
 
 import httpx
+import logging
 
 from apps.bot.app.config import BotSettings, get_settings
 from apps.bot.app.speech.base import (
@@ -16,6 +17,8 @@ from apps.bot.app.speech.base import (
 from apps.bot.app.speech.http_utils import response_error, retry_http
 from apps.bot.app.speech.temp_files import create_temp_audio_path
 from apps.bot.app.speech.text import prepare_text_for_tts, truncate_text
+
+logger = logging.getLogger(__name__)
 
 
 class AishaSpeechProvider:
@@ -51,6 +54,7 @@ class AishaSpeechProvider:
         if response.status_code >= 400:
             raise response_error(response)
         payload = response.json()
+        logger.info("Aisha STT raw response: %s", payload)
         text = str(payload.get("text", "")).strip()
         if not text:
             raise SpeechProviderError("Aisha STT returned empty text")
