@@ -5,11 +5,11 @@ import uuid
 from aiogram.types import Message, User
 
 from apps.bot.app.agent.agent import get_thread_id, reset_user_thread
-from apps.bot.app.services.language_service import Language
 from apps.bot.app.services.welcome_service import (
     get_active_welcome_message,
     persist_welcome_to_history,
 )
+from packages.shared.utils.languages import Language
 
 
 async def reset_thread_and_send_welcome(

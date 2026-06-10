@@ -6,11 +6,10 @@ from aiogram import F, Router
 from aiogram.types import CallbackQuery, Message
 
 from apps.bot.app.services.language_service import (
-    LANGUAGE_LABELS,
-    normalize_preferred_language,
     set_preferred_language,
 )
 from apps.bot.app.services.welcome_flow import reset_thread_and_send_welcome
+from packages.shared.utils.languages import LANGUAGE_LABELS, normalize_preferred_language
 
 logger = logging.getLogger(__name__)
 router = Router()

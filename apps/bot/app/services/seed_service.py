@@ -5,8 +5,8 @@ import logging
 from sqlalchemy import select, func
 
 from apps.bot.app.db.session import async_session_factory
-from apps.bot.app.services.welcome_service import DEFAULT_WELCOME_MESSAGES, WELCOME_PROMPT_KINDS
 from packages.shared.models.database import AppSetting, PromptVersion
+from packages.shared.utils.welcome_messages import DEFAULT_WELCOME_MESSAGES, WELCOME_PROMPT_KINDS
 
 logger = logging.getLogger(__name__)
 

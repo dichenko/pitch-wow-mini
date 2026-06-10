@@ -1,22 +1,17 @@
 """User language profile helpers for Telegram bot flows."""
 
-from typing import Literal
-
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message, User
 from sqlalchemy import select
 
 from apps.bot.app.db.session import async_session_factory
 from packages.shared.models.database import UserProfile
-
-Language = Literal["ru", "uz", "en"]
-SUPPORTED_LANGUAGES: tuple[Language, ...] = ("ru", "uz", "en")
-DEFAULT_LANGUAGE: Language = "ru"
-
-LANGUAGE_LABELS: dict[Language, str] = {
-    "ru": "🇷🇺 Русский",
-    "uz": "🇺🇿 O'zbekcha",
-    "en": "🇬🇧 English",
-}
+from packages.shared.utils.languages import (
+    DEFAULT_LANGUAGE,
+    LANGUAGE_LABELS,
+    SUPPORTED_LANGUAGES,
+    Language,
+    normalize_preferred_language,
+)
 
 LANGUAGE_SELECTION_TEXT = (
     "Выберите язык общения / Muloqot tilini tanlang / Choose your language:"
@@ -27,14 +22,6 @@ LANGUAGE_REQUIRED_TEXT: dict[Language, str] = {
     "uz": "Avval muloqot tilini tanlang.",
     "en": "Please choose your language first.",
 }
-
-
-def normalize_preferred_language(language: str | None) -> Language | None:
-    if language in SUPPORTED_LANGUAGES:
-        return language  # type: ignore[return-value]
-    return None
-
-
 def language_selection_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[

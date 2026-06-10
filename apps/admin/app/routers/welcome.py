@@ -16,12 +16,9 @@ from apps.admin.app.services.session import (
     verify_csrf,
 )
 from apps.bot.app.services.audit_service import log_audit_event
-from apps.bot.app.services.language_service import LANGUAGE_LABELS, normalize_preferred_language
-from apps.bot.app.services.welcome_service import (
-    DEFAULT_WELCOME_MESSAGES,
-    WELCOME_PROMPT_KINDS,
-)
 from packages.shared.models.database import PromptVersion
+from packages.shared.utils.languages import LANGUAGE_LABELS, normalize_preferred_language
+from packages.shared.utils.welcome_messages import DEFAULT_WELCOME_MESSAGES, WELCOME_PROMPT_KINDS
 
 router = APIRouter()
 templates_dir = os.path.join(os.path.dirname(__file__), "..", "templates")
