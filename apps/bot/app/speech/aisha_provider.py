@@ -55,7 +55,7 @@ class AishaSpeechProvider:
             raise response_error(response)
         payload = response.json()
         logger.info("Aisha STT raw response: %s", payload)
-        text = str(payload.get("text", "")).strip()
+        text = str(payload.get("transcript", payload.get("text", ""))).strip()
         if not text:
             raise SpeechProviderError("Aisha STT returned empty text")
         return SpeechToTextResult(
