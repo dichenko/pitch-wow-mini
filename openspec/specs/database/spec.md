@@ -17,6 +17,35 @@ Index on `tg_id`.
 - **WHEN** a new admin is added by a superadmin
 - **THEN** the `admins` table SHALL contain the new record with `is_active = TRUE`
 
+### Requirement: Database shall store Telegram user profiles
+
+The system SHALL create and maintain a `user_profiles` table for Telegram users.
+
+Fields SHALL include: `tg_id` (BIGINT primary key), `preferred_language` (TEXT NULL with allowed values `uz`, `ru`, `en`), `first_name` (TEXT NULL), `last_name` (TEXT NULL), `username` (TEXT NULL), `language_code` (TEXT NULL), `created_at` (TIMESTAMPTZ NOT NULL DEFAULT now()), and `updated_at` (TIMESTAMPTZ NOT NULL DEFAULT now()).
+
+#### Scenario: User profile created
+
+- **WHEN** the bot first sees a Telegram user
+- **THEN** the system SHALL upsert a `user_profiles` record for that `tg_id`
+- **THEN** Telegram display metadata SHALL be stored when available
+
+#### Scenario: Preferred language persisted
+
+- **WHEN** user selects a language from the language keyboard
+- **THEN** the system SHALL update `user_profiles.preferred_language` to `uz`, `ru`, or `en`
+- **THEN** `updated_at` SHALL be refreshed
+
+#### Scenario: Preferred language loaded
+
+- **WHEN** text or voice handlers process a user update
+- **THEN** the system SHALL load `preferred_language` from `user_profiles` by Telegram user ID
+- **THEN** missing or unsupported values SHALL be treated as no selected language
+
+#### Scenario: Invalid language rejected at persistence boundary
+
+- **WHEN** code attempts to persist a preferred language outside `uz`, `ru`, or `en`
+- **THEN** the database constraint or repository validation SHALL reject the value
+
 ### Requirement: Database shall store admin login tokens
 
 The system SHALL create and maintain an `admin_login_tokens` table.
@@ -34,7 +63,7 @@ Indexes on `token_hash`, `expires_at`.
 
 The system SHALL create and maintain a `prompt_versions` table.
 
-Fields: `id` (UUID PK), `kind` (TEXT NOT NULL, CHECK system_prompt/tools_instruction/censor_prompt), `version_number` (INTEGER NOT NULL), `content` (TEXT NOT NULL), `is_active` (BOOLEAN NOT NULL DEFAULT FALSE), `created_by_admin_id` (UUID NULL REFERENCES admins), `created_by_tg_id` (BIGINT NULL), `created_by_username` (TEXT NULL), `change_note` (TEXT NULL), `restored_from_version_id` (UUID NULL REFERENCES prompt_versions), `created_at` (TIMESTAMPTZ NOT NULL DEFAULT now()).
+Fields: `id` (UUID PK), `kind` (TEXT NOT NULL, CHECK system_prompt/tools_instruction/censor_prompt/welcome_message/welcome_message_ru/welcome_message_uz/welcome_message_en), `version_number` (INTEGER NOT NULL), `content` (TEXT NOT NULL), `is_active` (BOOLEAN NOT NULL DEFAULT FALSE), `created_by_admin_id` (UUID NULL REFERENCES admins), `created_by_tg_id` (BIGINT NULL), `created_by_username` (TEXT NULL), `change_note` (TEXT NULL), `restored_from_version_id` (UUID NULL REFERENCES prompt_versions), `created_at` (TIMESTAMPTZ NOT NULL DEFAULT now()).
 
 Constraints: UNIQUE(kind, version_number), partial unique index on (kind WHERE is_active=true) for one active per kind.
 
@@ -43,6 +72,13 @@ Constraints: UNIQUE(kind, version_number), partial unique index on (kind WHERE i
 - **WHEN** an admin saves a new system prompt
 - **THEN** a new record SHALL be inserted with an incremented `version_number` and `is_active = TRUE`
 - **THEN** all previous versions of the same kind SHALL have `is_active = FALSE`
+
+#### Scenario: Localized welcome prompt version saved
+
+- **WHEN** an admin saves a localized welcome message for one language
+- **THEN** a new `prompt_versions` row SHALL be inserted for that language-specific welcome kind
+- **THEN** all previous versions of that same language-specific welcome kind SHALL have `is_active = FALSE`
+- **THEN** active prompt versions for other languages SHALL NOT be modified
 
 ### Requirement: Database shall store audit log
 
@@ -141,4 +177,28 @@ Indexes SHALL support efficient retrieval of the latest records by `user_tg_id`,
 
 - **WHEN** the bot cannot produce a final assistant response for a user message
 - **THEN** no completed dialogue row SHALL be inserted for that failed message
+
+### Requirement: Database migration shall allow localized welcome prompt kinds
+
+The system SHALL update database constraints so `prompt_versions.kind` accepts `welcome_message_ru`, `welcome_message_uz`, and `welcome_message_en`.
+
+#### Scenario: Localized kind accepted
+
+- **WHEN** code inserts a prompt version with kind `welcome_message_ru`, `welcome_message_uz`, or `welcome_message_en`
+- **THEN** the database SHALL accept the row when all other constraints are valid
+
+#### Scenario: Unsupported kind rejected
+
+- **WHEN** code inserts a prompt version with an unsupported kind
+- **THEN** the database SHALL reject the row
+
+### Requirement: Dialogue history shall remain language-neutral
+
+The system SHALL continue storing completed dialogue turns in `dialogue_history` without making language a required field.
+
+#### Scenario: Dialogue stored after language selection
+
+- **WHEN** a user with a stored preferred language receives a final assistant response
+- **THEN** the system SHALL insert `dialogue_history` as before
+- **THEN** language routing SHALL be recoverable from `user_profiles.preferred_language`
 
