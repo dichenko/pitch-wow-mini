@@ -9,6 +9,7 @@ from aiogram import Router
 from aiogram.types import FSInputFile, Message
 
 from apps.bot.app.config import get_settings
+from apps.bot.app.handlers.message import send_typing_activity
 from apps.bot.app.services.language_service import require_preferred_language
 from apps.bot.app.services.settings_service import get_tts_prompt
 from apps.bot.app.speech import SpeechProviderError, create_speech_providers
@@ -66,6 +67,8 @@ async def handle_voice(message: Message) -> None:
     if not settings.voice_enabled:
         await message.answer(VOICE_DISABLED_MESSAGES[language])
         return
+
+    await send_typing_activity(message)
 
     trace_id = str(uuid.uuid4())
     media = message.voice or message.audio

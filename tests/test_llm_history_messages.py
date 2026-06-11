@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 
 import pytest
+from aiogram.enums import ChatAction
 from langchain_core.messages import AIMessage, HumanMessage
 
 from apps.bot.app.agent.agent import _user_reset_counters, get_thread_id, reset_user_thread
@@ -17,11 +18,29 @@ class _FakeUser:
     language_code = "ru"
 
 
+class _FakeChat:
+    id = 183866240
+
+
+class _FakeBot:
+    def __init__(self, events=None, fail_chat_action=False):
+        self.events = events if events is not None else []
+        self.fail_chat_action = fail_chat_action
+
+    async def send_chat_action(self, chat_id, action):
+        self.events.append(("typing", chat_id, action))
+        if self.fail_chat_action:
+            raise RuntimeError("chat action failed")
+
+
 class _FakeMessage:
     from_user = _FakeUser()
+    chat = _FakeChat()
 
-    def __init__(self):
+    def __init__(self, bot=None, events=None):
         self.answers = []
+        self.events = events if events is not None else []
+        self.bot = bot or _FakeBot(self.events)
 
     async def answer(self, text):
         self.answers.append(text)
@@ -186,6 +205,98 @@ async def test_process_user_text_sends_history_through_common_path(monkeypatch, 
             "llm_model": f"{provider}-model",
         }
     ]
+    assert message.answers == ["final response"]
+
+
+@pytest.mark.asyncio
+async def test_process_user_text_sends_typing_before_agent_invocation(monkeypatch):
+    events = []
+    fake_agent = _FakeAgent("openai")
+
+    async def assemble_prompt():
+        return "system prompt", {}
+
+    async def create_agent(**kwargs):
+        assert events == [("typing", 183866240, ChatAction.TYPING)]
+        return fake_agent
+
+    async def get_llm_history_messages():
+        return 0
+
+    async def load_dialogue_history(**kwargs):
+        return []
+
+    async def apply_censor(**kwargs):
+        return kwargs["draft_response"]
+
+    async def save_dialogue_turn_best_effort(**kwargs):
+        return None
+
+    monkeypatch.setattr(message_module, "assemble_prompt", assemble_prompt)
+    monkeypatch.setattr(message_module, "create_agent", create_agent)
+    monkeypatch.setattr(message_module, "get_llm_history_messages", get_llm_history_messages)
+    monkeypatch.setattr(message_module, "load_dialogue_history", load_dialogue_history)
+    monkeypatch.setattr(message_module, "apply_censor", apply_censor)
+    monkeypatch.setattr(
+        message_module,
+        "save_dialogue_turn_best_effort",
+        save_dialogue_turn_best_effort,
+    )
+    monkeypatch.setattr(message_module, "get_thread_id", lambda user_id: str(user_id))
+
+    message = _FakeMessage(events=events)
+    await message_module.process_user_text(message=message, user_text="current question")
+
+    assert events == [("typing", 183866240, ChatAction.TYPING)]
+    assert message.answers == ["draft response"]
+
+
+@pytest.mark.asyncio
+async def test_process_user_text_continues_when_typing_activity_fails(monkeypatch):
+    fake_agent = _FakeAgent("openai")
+
+    async def assemble_prompt():
+        return "system prompt", {}
+
+    async def create_agent(**kwargs):
+        return fake_agent
+
+    async def get_llm_history_messages():
+        return 0
+
+    async def load_dialogue_history(**kwargs):
+        return []
+
+    async def apply_censor(**kwargs):
+        return "final response"
+
+    async def save_dialogue_turn_best_effort(**kwargs):
+        return None
+
+    monkeypatch.setattr(message_module, "assemble_prompt", assemble_prompt)
+    monkeypatch.setattr(message_module, "create_agent", create_agent)
+    monkeypatch.setattr(message_module, "get_llm_history_messages", get_llm_history_messages)
+    monkeypatch.setattr(message_module, "load_dialogue_history", load_dialogue_history)
+    monkeypatch.setattr(message_module, "apply_censor", apply_censor)
+    monkeypatch.setattr(
+        message_module,
+        "save_dialogue_turn_best_effort",
+        save_dialogue_turn_best_effort,
+    )
+    monkeypatch.setattr(message_module, "get_thread_id", lambda user_id: str(user_id))
+
+    events = []
+    message = _FakeMessage(
+        bot=_FakeBot(events=events, fail_chat_action=True),
+        events=events,
+    )
+    result = await message_module.process_user_text(
+        message=message,
+        user_text="current question",
+    )
+
+    assert result == "final response"
+    assert events == [("typing", 183866240, ChatAction.TYPING)]
     assert message.answers == ["final response"]
 
 

@@ -5,6 +5,7 @@ import time
 import uuid
 
 from aiogram import Router
+from aiogram.enums import ChatAction
 from aiogram.filters import Command
 from aiogram.types import Message
 from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
@@ -34,6 +35,19 @@ PROCESSING_ERROR_MESSAGES = {
 }
 
 
+async def send_typing_activity(message: Message) -> None:
+    bot = getattr(message, "bot", None)
+    chat = getattr(message, "chat", None)
+    chat_id = getattr(chat, "id", None)
+    if bot is None or chat_id is None:
+        return
+
+    try:
+        await bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
+    except Exception as exc:
+        logger.warning("Failed to send typing chat action: %s", exc, exc_info=True)
+
+
 @router.message(~Command("start", "admin", "restart"))
 async def handle_message(message: Message) -> None:
     if not message.from_user or not message.text:
@@ -57,6 +71,8 @@ async def process_user_text(
 ) -> str | None:
     if not message.from_user or not user_text:
         return None
+
+    await send_typing_activity(message)
 
     trace_id = str(uuid.uuid4())
     user = message.from_user
