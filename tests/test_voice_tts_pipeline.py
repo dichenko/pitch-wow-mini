@@ -2,6 +2,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from aiogram.enums import ChatAction
 
 from apps.bot.app.handlers import message as message_module
 from apps.bot.app.handlers import voice as voice_module
@@ -23,7 +24,16 @@ class FakeMedia:
 
 
 class FakeBot:
+    def __init__(self, events=None):
+        self.events = events
+
+    async def send_chat_action(self, chat_id, action):
+        if self.events is not None:
+            self.events.append(("typing", chat_id, action))
+
     async def get_file(self, file_id):
+        if self.events is not None:
+            self.events.append(("get_file", file_id))
         return SimpleNamespace(file_path="telegram/file.ogg")
 
     async def download_file(self, file_path, destination):
@@ -34,11 +44,13 @@ class FakeMessage:
     from_user = FakeUser()
     voice = FakeMedia()
     audio = None
-    bot = FakeBot()
+    chat = SimpleNamespace(id=100)
 
-    def __init__(self):
+    def __init__(self, events=None):
         self.answers = []
         self.voice_answers = []
+        self.events = events if events is not None else []
+        self.bot = FakeBot(self.events)
 
     async def answer(self, text, **kwargs):
         self.answers.append(text)
@@ -197,6 +209,36 @@ async def test_voice_pipeline_asks_language_before_download(monkeypatch, tmp_pat
     assert message.answers == [LANGUAGE_SELECTION_TEXT]
     assert message.voice_answers == []
     assert not (tmp_path / "input.ogg").exists()
+
+
+@pytest.mark.asyncio
+async def test_voice_pipeline_sends_typing_before_media_processing(monkeypatch, tmp_path):
+    events = []
+    stt_provider = FakeSttProvider("transcript", result_language="en")
+
+    _patch_voice_basics(monkeypatch, tmp_path, language="en")
+    monkeypatch.setattr(
+        voice_module,
+        "create_speech_providers",
+        lambda settings: SimpleNamespace(
+            stt_for_language=lambda language: stt_provider,
+            tts_for_language=lambda language: FailingTtsProvider(),
+        ),
+    )
+
+    async def process_user_text(message, user_text, response_language=None):
+        await message.answer("text response")
+        return "text response"
+
+    monkeypatch.setattr(message_module, "process_user_text", process_user_text)
+
+    message = FakeMessage(events=events)
+    await voice_module.handle_voice(message)
+
+    assert events[:2] == [
+        ("typing", 100, ChatAction.TYPING),
+        ("get_file", "file-id"),
+    ]
 
 
 def _patch_voice_basics(monkeypatch, tmp_path, language):
