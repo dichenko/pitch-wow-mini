@@ -1,3 +1,5 @@
+name: pitch-wow-mini
+
 services:
   bot:
     build:
@@ -47,3 +49,5 @@ services:
 
 volumes:
   postgres_data:
+    external: true
+    name: ai-assistant-template_postgres_data
