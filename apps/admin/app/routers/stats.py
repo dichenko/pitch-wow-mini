@@ -2,15 +2,16 @@
 
 import json
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import text
+from sqlalchemy import Date, cast, func, select
 
 from apps.admin.app.db.session import async_session_factory
 from apps.admin.app.services.session import get_current_admin, get_or_create_csrf_token, set_csrf_cookie
+from packages.shared.models.database import DialogueHistory
 
 router = APIRouter()
 templates_dir = os.path.join(os.path.dirname(__file__), "..", "templates")
@@ -19,18 +20,14 @@ templates = Jinja2Templates(directory=templates_dir)
 DAYS = 30
 
 
-def _date_range() -> tuple[str, str, list[str]]:
+def _date_range() -> tuple[date, date, list[str]]:
     today = datetime.now(timezone.utc).date()
     start = today - timedelta(days=DAYS - 1)
-    labels: list[str] = []
-    for i in range(DAYS):
-        d = start + timedelta(days=i)
-        labels.append(d.isoformat())
-    return start.isoformat(), today.isoformat(), labels
+    labels = [(start + timedelta(days=i)).isoformat() for i in range(DAYS)]
+    return start, today, labels
 
 
-def _fill(labels: list[str], rows) -> list[int | float]:
-    """Fill missing days with zeros. `rows` is a list of (day_str, value)."""
+def _fill(labels: list[str], rows) -> list[int]:
     table = {str(r[0]): r[1] for r in rows}
     return [table.get(label, 0) for label in labels]
 
@@ -41,66 +38,60 @@ async def stats_page(request: Request):
     if not admin:
         return RedirectResponse(url="/admin/login?token=", status_code=303)
 
-    start_str, end_str, labels = _date_range()
+    start_date, end_date, labels = _date_range()
+
+    day_col = cast(DialogueHistory.created_at, Date)
+    not_start = DialogueHistory.user_message != "[start]"
 
     async with async_session_factory() as session:
-        # 1. New users per day (first message date, excluding [start])
-        new_users_rows = await session.execute(
-            text("""
-                SELECT first_day::date as day, COUNT(*) as cnt
-                FROM (
-                    SELECT user_tg_id, MIN(created_at)::date as first_day
-                    FROM dialogue_history
-                    WHERE user_message != '[start]'
-                    GROUP BY user_tg_id
-                ) sub
-                WHERE first_day BETWEEN :start AND :end
-                GROUP BY first_day
-                ORDER BY first_day
-            """),
-            {"start": start_str, "end": end_str},
+        # 1. New users per day — first message date per user
+        first_msg_subq = (
+            select(
+                DialogueHistory.user_tg_id,
+                cast(func.min(DialogueHistory.created_at), Date).label("first_day"),
+            )
+            .where(not_start)
+            .group_by(DialogueHistory.user_tg_id)
+            .subquery()
         )
-        new_users = _fill(labels, new_users_rows.fetchall())
+        q1 = (
+            select(first_msg_subq.c.first_day, func.count().label("cnt"))
+            .where(first_msg_subq.c.first_day.between(start_date, end_date))
+            .group_by(first_msg_subq.c.first_day)
+            .order_by(first_msg_subq.c.first_day)
+        )
+        new_users_rows = (await session.execute(q1)).all()
+        new_users = _fill(labels, new_users_rows)
 
         # 2. Messages per day
-        msg_rows = await session.execute(
-            text("""
-                SELECT created_at::date as day, COUNT(*) as cnt
-                FROM dialogue_history
-                WHERE user_message != '[start]'
-                  AND created_at::date BETWEEN :start AND :end
-                GROUP BY created_at::date
-                ORDER BY day
-            """),
-            {"start": start_str, "end": end_str},
+        q2 = (
+            select(day_col, func.count().label("cnt"))
+            .where(not_start, day_col.between(start_date, end_date))
+            .group_by(day_col)
+            .order_by(day_col)
         )
-        messages = _fill(labels, msg_rows.fetchall())
+        msg_rows = (await session.execute(q2)).all()
+        messages = _fill(labels, msg_rows)
 
         # 3. Active users per day
-        active_rows = await session.execute(
-            text("""
-                SELECT created_at::date as day, COUNT(DISTINCT user_tg_id) as cnt
-                FROM dialogue_history
-                WHERE user_message != '[start]'
-                  AND created_at::date BETWEEN :start AND :end
-                GROUP BY created_at::date
-                ORDER BY day
-            """),
-            {"start": start_str, "end": end_str},
+        q3 = (
+            select(day_col, func.count(func.distinct(DialogueHistory.user_tg_id)).label("cnt"))
+            .where(not_start, day_col.between(start_date, end_date))
+            .group_by(day_col)
+            .order_by(day_col)
         )
-        active_users = _fill(labels, active_rows.fetchall())
+        active_rows = (await session.execute(q3)).all()
+        active_users = _fill(labels, active_rows)
 
-        # 4. Average messages per user per day
-        avg_per_user: list[float] = []
-        for i in range(DAYS):
-            m = messages[i]
-            a = active_users[i]
-            avg = round(m / a, 1) if a > 0 else 0.0
-            avg_per_user.append(avg)
+    # 4. Average messages per user per day
+    avg_per_user: list[float] = []
+    for i in range(DAYS):
+        m = messages[i]
+        a = active_users[i]
+        avg_per_user.append(round(m / a, 1) if a > 0 else 0.0)
 
-        # Totals
-        total_new = sum(new_users)
-        total_msgs = sum(messages)
+    total_new = sum(new_users)
+    total_msgs = sum(messages)
 
     csrf_token = get_or_create_csrf_token(request)
     response = templates.TemplateResponse(
