@@ -17,6 +17,7 @@ from apps.admin.app.routers import (
     debug,
     preview_prompt,
     settings as settings_router,
+    stats,
     system_prompt,
     tools_instruction,
     welcome,
@@ -49,6 +50,7 @@ app.include_router(admins.router)
 app.include_router(debug.router)
 app.include_router(preview_prompt.router)
 app.include_router(settings_router.router)
+app.include_router(stats.router)
 
 
 @app.get("/health")

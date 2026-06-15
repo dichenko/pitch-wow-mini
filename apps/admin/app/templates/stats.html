@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}Statistics — Admin Panel{% endblock %}
+
+{% block content %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+
+<style>
+    .stats-summary { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 24px; }
+    .stat-card { background: white; border-radius: 8px; padding: 20px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .stat-card .value { font-size: 32px; font-weight: 700; color: #1a1a2e; }
+    .stat-card .label { font-size: 13px; color: #666; margin-top: 4px; }
+    .charts { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
+    .chart-box { background: white; border-radius: 8px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .chart-box h3 { margin-bottom: 12px; color: #1a1a2e; font-size: 16px; }
+    .chart-box canvas { max-height: 300px; }
+    @media (max-width: 1200px) { .charts { grid-template-columns: 1fr; } }
+</style>
+
+<h2>Statistics — last 30 days</h2>
+
+<div class="stats-summary">
+    <div class="stat-card">
+        <div class="value">{{ total_new }}</div>
+        <div class="label">New Users</div>
+    </div>
+    <div class="stat-card">
+        <div class="value">{{ total_msgs }}</div>
+        <div class="label">Total Messages</div>
+    </div>
+</div>
+
+<div class="charts">
+    <div class="chart-box">
+        <h3>New Users per Day</h3>
+        <canvas id="chartNewUsers"></canvas>
+    </div>
+    <div class="chart-box">
+        <h3>Messages per Day</h3>
+        <canvas id="chartMessages"></canvas>
+    </div>
+    <div class="chart-box">
+        <h3>Active Users per Day</h3>
+        <canvas id="chartActiveUsers"></canvas>
+    </div>
+    <div class="chart-box">
+        <h3>Avg Messages per User per Day</h3>
+        <canvas id="chartAvgPerUser"></canvas>
+    </div>
+</div>
+
+<script>
+const labels = {{ labels | safe }};
+const colors = { blue: 'rgba(15,52,96,0.8)', teal: 'rgba(22,160,133,0.8)', orange: 'rgba(230,126,34,0.8)', purple: 'rgba(142,68,173,0.8)' };
+
+function makeChart(canvasId, data, label, color, type = 'bar') {
+    const ctx = document.getElementById(canvasId).getContext('2d');
+    new Chart(ctx, {
+        type: type,
+        data: {
+            labels: labels.map(l => l.slice(5)),
+            datasets: [{
+                label: label,
+                data: data,
+                backgroundColor: color,
+                borderColor: color.replace('0.8', '1'),
+                borderWidth: 1,
+                borderRadius: 3,
+                fill: type === 'line',
+                tension: 0.2,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                y: { beginAtZero: true, ticks: { precision: 0 } },
+                x: { ticks: { maxTicksLimit: 15, font: { size: 10 } } }
+            }
+        }
+    });
+}
+
+makeChart('chartNewUsers', {{ new_users | safe }}, 'New Users', colors.blue);
+makeChart('chartMessages', {{ messages | safe }}, 'Messages', colors.teal);
+makeChart('chartActiveUsers', {{ active_users | safe }}, 'Active Users', colors.orange);
+makeChart('chartAvgPerUser', {{ avg_per_user | safe }}, 'Avg/User', colors.purple, 'line');
+</script>
+{% endblock %}
