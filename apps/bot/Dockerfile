@@ -12,7 +12,6 @@ COPY packages/ /app/packages/
 # Copy bot service and migrations
 COPY apps/bot/ /app/apps/bot/
 COPY migrations/ /app/migrations/
-COPY new_task/ /app/new_task/
 
 # Install dependencies
 RUN pip install --no-cache-dir -r apps/bot/requirements.txt
