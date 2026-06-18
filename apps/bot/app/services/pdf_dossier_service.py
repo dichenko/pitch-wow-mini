@@ -311,26 +311,14 @@ class PdfDossierService:
 
     async def _create_pdf_job(self, *, external_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         url = f"{self.settings.pitchwow_pdf_base_url.rstrip('/')}/v1/reports"
-        request_body = {"external_id": external_id, "payload": payload}
-        logger.info(
-            "Pitch-wow PDF API request method=POST url=%s body=%s",
-            url,
-            _json_for_log(request_body),
-        )
         response = await self._post(
             url,
             headers={
                 "Authorization": f"Bearer {self.settings.pitchwow_pdf_api_key}",
                 "Content-Type": "application/json",
             },
-            json=request_body,
+            json={"external_id": external_id, "payload": payload},
             timeout=30,
-        )
-        logger.info(
-            "Pitch-wow PDF API response method=POST url=%s status_code=%s body=%s",
-            url,
-            response.status_code,
-            _response_body_for_log(response),
         )
         if response.status_code >= 400:
             raise PdfDossierError(_http_error("PDF API job creation failed", response))
@@ -351,17 +339,10 @@ class PdfDossierService:
                 logger.warning("PDF dossier polling timed out job_id=%s", job.get("job_id"))
                 return {**job, "status": "timeout", "error": {"message": "PDF generation timed out"}}
 
-            logger.info("Pitch-wow PDF API request method=GET url=%s", url)
             response = await self._get(
                 url,
                 headers={"Authorization": f"Bearer {self.settings.pitchwow_pdf_api_key}"},
                 timeout=30,
-            )
-            logger.info(
-                "Pitch-wow PDF API response method=GET url=%s status_code=%s body=%s",
-                url,
-                response.status_code,
-                _response_body_for_log(response),
             )
             if response.status_code >= 400:
                 raise PdfDossierError(_http_error("PDF API polling failed", response))
@@ -377,14 +358,7 @@ class PdfDossierService:
             poll_after = _poll_after_seconds(payload)
 
     async def _download_pdf(self, pdf_url: str, *, external_id: str) -> str:
-        logger.info("Pitch-wow PDF download request method=GET url=%s", pdf_url)
         response = await self._get(pdf_url, timeout=60)
-        logger.info(
-            "Pitch-wow PDF download response method=GET url=%s status_code=%s bytes=%s",
-            pdf_url,
-            response.status_code,
-            len(response.content or b""),
-        )
         if response.status_code >= 400:
             raise PdfDossierError(_http_error("PDF download failed", response))
         if not response.content:
@@ -539,18 +513,3 @@ def _job_error_message(job: dict[str, Any]) -> str:
 def _http_error(prefix: str, response: httpx.Response) -> str:
     body = response.text[:1000] if response.text else ""
     return f"{prefix}: HTTP {response.status_code}: {body}"
-
-
-def _json_for_log(value: Any) -> str:
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-
-
-def _response_body_for_log(response: httpx.Response) -> str:
-    headers = getattr(response, "headers", {}) or {}
-    content_type = headers.get("content-type", "")
-    if "application/json" in content_type.lower():
-        try:
-            return _json_for_log(response.json())
-        except ValueError:
-            pass
-    return response.text
