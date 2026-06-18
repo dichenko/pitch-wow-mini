@@ -15,7 +15,6 @@ from apps.bot.app.services.history_service import (
     load_latest_user_thread_history,
     load_user_thread_history,
 )
-from apps.bot.app.services.pdf_dossier_service import PdfDossierService
 from packages.shared.models.database import AdminNotification, DialogueHistory
 
 logger = logging.getLogger(__name__)
@@ -156,7 +155,6 @@ async def send_to_admin(comment: str) -> str:
 
     delivered = False
     delivery_error = None
-    pdf_dossier_metadata = None
 
     if settings.admin_telegram_chat_id:
         try:
@@ -175,7 +173,6 @@ async def send_to_admin(comment: str) -> str:
             delivered = True
 
             tmp_path = None
-            records: list[DialogueHistory] = []
             try:
                 if current_thread_id:
                     records = await load_user_thread_history(tg_id, current_thread_id)
@@ -226,54 +223,6 @@ async def send_to_admin(comment: str) -> str:
             finally:
                 if tmp_path and os.path.exists(tmp_path):
                     os.remove(tmp_path)
-
-            pdf_path = None
-            try:
-                pdf_result = await PdfDossierService(settings=settings).generate(
-                    records=records,
-                    external_id=trace_id,
-                    user_data=user_data,
-                    current_user_message=current_user_message,
-                    comment=comment,
-                )
-                pdf_dossier_metadata = pdf_result.metadata
-                if pdf_result.success and pdf_result.pdf_path:
-                    pdf_path = pdf_result.pdf_path
-
-                    from aiogram.types import FSInputFile
-
-                    await bot.send_document(
-                        int(settings.admin_telegram_chat_id),
-                        document=FSInputFile(pdf_path),
-                        caption=f"PDF dossier @{username or tg_id}",
-                    )
-                else:
-                    await bot.send_message(
-                        int(settings.admin_telegram_chat_id),
-                        f"PDF не создан: {pdf_result.error or pdf_result.status}",
-                    )
-            except Exception as exc:
-                pdf_dossier_metadata = {"status": "failed", "error": str(exc)}
-                logger.error(
-                    "Failed to generate or send PDF dossier trace_id=%s: %s",
-                    trace_id,
-                    exc,
-                    exc_info=True,
-                )
-                try:
-                    await bot.send_message(
-                        int(settings.admin_telegram_chat_id),
-                        f"PDF не создан: {exc}",
-                    )
-                except Exception:
-                    logger.error(
-                        "Failed to send PDF failure message trace_id=%s",
-                        trace_id,
-                        exc_info=True,
-                    )
-            finally:
-                if pdf_path and os.path.exists(pdf_path):
-                    os.remove(pdf_path)
         except Exception as exc:
             delivery_error = str(exc)
             logger.error(
@@ -284,8 +233,6 @@ async def send_to_admin(comment: str) -> str:
             )
 
     try:
-        if pdf_dossier_metadata is not None:
-            payload["pdf_dossier"] = pdf_dossier_metadata
         async with async_session_factory() as session:
             notification = AdminNotification(
                 trace_id=trace_id,
