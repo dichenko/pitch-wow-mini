@@ -128,6 +128,7 @@ See `.env.example` for all available variables. Key groups:
 | Telegram | `TELEGRAM_BOT_TOKEN`, `BOT_MODE` | Bot token, polling/webhook mode |
 | Admin | `ROOT_ADMIN_TG_ID`, `ADMIN_TELEGRAM_CHAT_ID` | Root admin and notification chat |
 | LLM | `OPENAI_API_KEY`, `OPENAI_TEXT_MODEL` | Language model configuration |
+| PDF reports | `PITCHWOW_PDF_API_KEY`, `PITCHWOW_PDF_BASE_URL` | Optional Pitch-wow PDF dossier generation for `send_to_admin` |
 | LangSmith | `LANGSMITH_TRACING`, `LANGSMITH_API_KEY` | Optional observability |
 | Session | `SESSION_SECRET`, `SESSION_COOKIE_*` | Admin session security |
 | Censor | `CENSOR_ENABLED` | Optional response reviewer |
@@ -167,7 +168,7 @@ The only REQUIRED default tool. LLM provides only `comment`; the backend auto-at
 - `tg_id`, `first_name`, `last_name`, `username`, `telegram_link`, `language_code`
 - `trace_id`, `timestamp`
 
-Delivers to `ADMIN_TELEGRAM_CHAT_ID` if configured, always saves to DB.
+Delivers to `ADMIN_TELEGRAM_CHAT_ID` if configured, always saves to DB. The tool also sends a markdown dialogue history file and, when Pitch-wow PDF settings are configured, attempts to attach a generated founder dossier PDF. Recommended OpenAI model for dossier generation: `OPENAI_TEXT_MODEL=gpt-5.4-mini`.
 
 ### LangSmith Observability
 

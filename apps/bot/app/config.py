@@ -26,6 +26,10 @@ class BotSettings(AppSettings):
     # Admin notifications
     admin_telegram_chat_id: str = ""
 
+    # Pitch-wow PDF reports
+    pitchwow_pdf_api_key: str = ""
+    pitchwow_pdf_base_url: str = "https://api-pitchwow-pdf.liven8n.site"
+
     # LLM
     text_llm_provider: str = "openai"
     llm_history_messages: int = 20
