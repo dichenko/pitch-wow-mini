@@ -129,11 +129,9 @@ class PdfDossierService:
                 apply_generation_date(payload, prepared_at)
                 validate_payload_object(payload, schema)
 
-            api_payload = to_pitchwow_pdf_payload(payload)
             metadata["payload"] = payload
-            metadata["api_payload"] = api_payload
 
-            job = await self._create_pdf_job(external_id=external_id, payload=api_payload)
+            job = await self._create_pdf_job(external_id=external_id, payload=payload)
             metadata["job"] = _safe_job_metadata(job)
             logger.info(
                 "PDF dossier job created external_id=%s job_id=%s status=%s",
@@ -479,81 +477,6 @@ def validate_payload_object(payload: dict[str, Any], schema: dict[str, Any]) -> 
         first = errors[0]
         path = "/" + "/".join(str(part) for part in first.path)
         raise PdfDossierError(f"Generated dossier failed schema validation at {path}: {first.message}")
-
-
-def to_pitchwow_pdf_payload(payload: dict[str, Any]) -> dict[str, Any]:
-    """Map the rich dossier JSON to the current Pitch-wow PDF template payload."""
-    startup = payload.get("startup") if isinstance(payload.get("startup"), dict) else {}
-    founder = payload.get("founder") if isinstance(payload.get("founder"), dict) else {}
-    business = payload.get("business") if isinstance(payload.get("business"), dict) else {}
-    assessment = payload.get("assessment") if isinstance(payload.get("assessment"), dict) else {}
-    traction = business.get("traction") if isinstance(business.get("traction"), dict) else {}
-
-    summary = _first_non_empty(
-        startup.get("one_line"),
-        business.get("essence"),
-        payload.get("recommendation", {}).get("comment") if isinstance(payload.get("recommendation"), dict) else None,
-        "Summary is not available.",
-    )
-    traction_items = [
-        value
-        for value in [
-            traction.get("summary"),
-            _metric_text("schools", traction.get("schools_count")),
-            _metric_text("users", traction.get("users_count")),
-            _metric_text("monthly revenue USD", traction.get("monthly_revenue_usd")),
-            _metric_text("team size", traction.get("team_size")),
-        ]
-        if value
-    ]
-    if not traction_items:
-        traction_items = ["Traction data was not provided."]
-
-    risks = assessment.get("risks") if isinstance(assessment.get("risks"), list) else []
-    risk_items = [str(item) for item in risks if str(item).strip()]
-    if not risk_items:
-        risk_items = ["Key risks require human review."]
-
-    return {
-        "schema_version": str(payload.get("schema_version") or "1.0"),
-        "startup": {
-            "name": _first_non_empty(startup.get("name"), "Unknown startup"),
-            "tagline": _first_non_empty(startup.get("one_line"), business.get("essence"), "Tagline is not available."),
-            "stage": _first_non_empty(startup.get("stage"), "Unknown stage"),
-        },
-        "founder": {
-            "name": _first_non_empty(founder.get("full_name"), "Unknown founder"),
-            "role": _first_non_empty(founder.get("role"), "founder"),
-            "background": _first_non_empty(founder.get("background_short"), founder.get("founder_strength"), "Background is not available."),
-        },
-        "summary": summary,
-        "traction": traction_items,
-        "market": {
-            "segment": _first_non_empty(startup.get("industry"), business.get("customer"), "Unknown segment"),
-            "size": _first_non_empty(startup.get("location"), "Market size is not available."),
-            "insight": _first_non_empty(business.get("payer"), business.get("business_model"), "Market insight is not available."),
-        },
-        "risks": risk_items,
-    }
-
-
-def _first_non_empty(*values: Any) -> str:
-    for value in values:
-        text = str(value).strip() if value is not None else ""
-        if text:
-            return text
-    return ""
-
-
-def _metric_text(label: str, value: Any) -> str | None:
-    if value is None:
-        return None
-    if isinstance(value, (int, float)) and value == 0:
-        return None
-    text = str(value).strip()
-    if not text or text == "0":
-        return None
-    return f"{label}: {text}"
 
 
 def _strip_json_fence(value: str) -> str:

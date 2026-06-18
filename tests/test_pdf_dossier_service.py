@@ -7,7 +7,6 @@ from apps.bot.app.config import BotSettings
 from apps.bot.app.services import pdf_dossier_service as module
 from apps.bot.app.services.pdf_dossier_service import (
     PdfDossierService,
-    to_pitchwow_pdf_payload,
     validate_dossier_payload,
 )
 
@@ -55,27 +54,6 @@ def test_validate_dossier_payload_accepts_sample():
 
     assert payload["schema_version"] == "1.0"
     assert payload["template_id"] == "vc_founder_dossier_v1"
-
-
-def test_to_pitchwow_pdf_payload_maps_to_current_api_template():
-    rich_payload = validate_dossier_payload(_sample_json(), _schema())
-
-    api_payload = to_pitchwow_pdf_payload(rich_payload)
-
-    assert set(api_payload) == {
-        "schema_version",
-        "startup",
-        "founder",
-        "summary",
-        "traction",
-        "market",
-        "risks",
-    }
-    assert set(api_payload["startup"]) == {"name", "tagline", "stage"}
-    assert set(api_payload["founder"]) == {"name", "role", "background"}
-    assert set(api_payload["market"]) == {"segment", "size", "insight"}
-    assert api_payload["traction"]
-    assert api_payload["risks"]
 
 
 @pytest.mark.asyncio
@@ -136,15 +114,6 @@ async def test_generate_repairs_invalid_json_and_downloads_pdf(monkeypatch):
     assert Path(result.pdf_path).read_bytes() == b"%PDF bytes"
     assert result.metadata["repair_attempted"] is True
     assert client.posts[0]["json"]["external_id"] == "trace-1"
-    assert set(client.posts[0]["json"]["payload"]) == {
-        "schema_version",
-        "startup",
-        "founder",
-        "summary",
-        "traction",
-        "market",
-        "risks",
-    }
     assert client.posts[0]["headers"]["Authorization"] == "Bearer secret"
     Path(result.pdf_path).unlink()
 
