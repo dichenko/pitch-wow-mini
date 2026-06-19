@@ -18,7 +18,7 @@ class _FakeMessage:
     def __init__(self):
         self.answers = []
 
-    async def answer(self, text):
+    async def answer(self, text, **kwargs):
         self.answers.append(text)
 
 

@@ -4,6 +4,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message, U
 from sqlalchemy import select
 
 from apps.bot.app.db.session import async_session_factory
+from apps.bot.app.services.telegram_messages import answer_markdown_or_text
 from packages.shared.models.database import UserProfile
 from packages.shared.utils.languages import (
     LANGUAGE_LABELS,
@@ -38,7 +39,8 @@ def language_selection_keyboard() -> InlineKeyboardMarkup:
 
 
 async def answer_language_selection(message: Message) -> None:
-    await message.answer(
+    await answer_markdown_or_text(
+        message,
         LANGUAGE_SELECTION_TEXT,
         reply_markup=language_selection_keyboard(),
     )

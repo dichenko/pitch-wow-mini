@@ -112,13 +112,19 @@ async def test_send_to_admin_exports_only_current_thread(monkeypatch):
     sent_documents = []
 
     class FakeBot:
-        async def send_message(self, chat_id, text):
+        async def send_message(self, chat_id, text, **kwargs):
             captured["message_chat_id"] = chat_id
             captured["message_text"] = text
+            captured["message_kwargs"] = kwargs
 
-        async def send_document(self, chat_id, document, caption):
+        async def send_document(self, chat_id, document, caption, **kwargs):
             sent_documents.append(
-                {"chat_id": chat_id, "path": document.path, "caption": caption}
+                {
+                    "chat_id": chat_id,
+                    "path": document.path,
+                    "caption": caption,
+                    "kwargs": kwargs,
+                }
             )
 
     class FakeSession:
@@ -195,10 +201,10 @@ async def test_send_to_admin_falls_back_to_latest_thread_when_context_has_no_thr
     captured = {}
 
     class FakeBot:
-        async def send_message(self, chat_id, text):
+        async def send_message(self, chat_id, text, **kwargs):
             return None
 
-        async def send_document(self, chat_id, document, caption):
+        async def send_document(self, chat_id, document, caption, **kwargs):
             captured["document_path"] = document.path
 
     class FakeSession:

@@ -13,5 +13,5 @@ settings = get_settings()
 
 bot = Bot(
     token=settings.telegram_bot_token,
-    default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+    default=DefaultBotProperties(parse_mode=ParseMode.MARKDOWN),
 )

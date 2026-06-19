@@ -42,7 +42,7 @@ class _FakeMessage:
         self.events = events if events is not None else []
         self.bot = bot or _FakeBot(self.events)
 
-    async def answer(self, text):
+    async def answer(self, text, **kwargs):
         self.answers.append(text)
 
 

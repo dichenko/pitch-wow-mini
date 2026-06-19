@@ -12,6 +12,7 @@ from apps.bot.app.config import get_settings
 from apps.bot.app.handlers.message import send_typing_activity
 from apps.bot.app.services.language_service import require_preferred_language
 from apps.bot.app.services.settings_service import get_tts_prompt
+from apps.bot.app.services.telegram_messages import answer_markdown_or_text
 from apps.bot.app.speech import SpeechProviderError, create_speech_providers
 from apps.bot.app.speech.temp_files import (
     cleanup_temp_file,
@@ -65,7 +66,7 @@ async def handle_voice(message: Message) -> None:
         return
 
     if not settings.voice_enabled:
-        await message.answer(VOICE_DISABLED_MESSAGES[language])
+        await answer_markdown_or_text(message, VOICE_DISABLED_MESSAGES[language])
         return
 
     await send_typing_activity(message)
@@ -82,7 +83,8 @@ async def handle_voice(message: Message) -> None:
 
     file_size_mb = media.file_size / (1024 * 1024) if media.file_size else 0
     if file_size_mb > settings.voice_max_audio_size_mb:
-        await message.answer(
+        await answer_markdown_or_text(
+            message,
             FILE_TOO_LARGE_MESSAGES[language].format(
                 max_size=settings.voice_max_audio_size_mb
             )
@@ -103,7 +105,8 @@ async def handle_voice(message: Message) -> None:
 
         duration = await _probe_duration(normalized_path)
         if duration > settings.voice_max_duration_sec:
-            await message.answer(
+            await answer_markdown_or_text(
+                message,
                 DURATION_TOO_LONG_MESSAGES[language].format(
                     max_duration=settings.voice_max_duration_sec
                 )
@@ -155,7 +158,7 @@ async def handle_voice(message: Message) -> None:
                 exc,
                 exc_info=True,
             )
-            await message.answer(TTS_FALLBACK_MESSAGES[language])
+            await answer_markdown_or_text(message, TTS_FALLBACK_MESSAGES[language])
 
     except Exception as exc:
         logger.error(
@@ -165,7 +168,7 @@ async def handle_voice(message: Message) -> None:
             exc,
             exc_info=True,
         )
-        await message.answer(VOICE_RECOGNITION_ERROR_MESSAGES[language])
+        await answer_markdown_or_text(message, VOICE_RECOGNITION_ERROR_MESSAGES[language])
     finally:
         await cleanup_temp_file(input_path, reason="telegram_voice_input_cleanup")
         await cleanup_temp_file(normalized_path, reason="telegram_voice_normalized_cleanup")

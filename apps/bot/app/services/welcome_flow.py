@@ -9,6 +9,7 @@ from apps.bot.app.services.welcome_service import (
     get_active_welcome_message,
     persist_welcome_to_history,
 )
+from apps.bot.app.services.telegram_messages import answer_markdown_or_text
 from packages.shared.utils.languages import Language
 
 
@@ -29,7 +30,7 @@ async def send_welcome(
     trace_id = str(uuid.uuid4())
     thread_id = get_thread_id(user.id)
     welcome_text = await get_active_welcome_message(language)
-    await message.answer(welcome_text)
+    await answer_markdown_or_text(message, welcome_text)
 
     await persist_welcome_to_history(
         user_tg_id=user.id,

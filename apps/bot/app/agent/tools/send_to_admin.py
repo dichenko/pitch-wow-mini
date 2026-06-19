@@ -15,12 +15,12 @@ from apps.bot.app.services.history_service import (
     load_latest_user_thread_history,
     load_user_thread_history,
 )
+from apps.bot.app.services.telegram_messages import send_message_markdown_or_text
 from packages.shared.models.database import AdminNotification, DialogueHistory
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-# Context variable to hold current user data during tool invocation.
 _current_context: dict = {}
 
 
@@ -116,6 +116,26 @@ def _format_history_markdown(
     return "\n".join(lines)
 
 
+def _format_admin_message_markdown(
+    first_name: str | None,
+    last_name: str | None,
+    username: str | None,
+    telegram_link: str | None,
+    tg_id: int,
+    language_code: str | None,
+    comment: str,
+) -> str:
+    return (
+        "*Сообщение от пользователя*\n\n"
+        f"*Имя:* {first_name or '—'} {last_name or ''}\n"
+        f"*Username:* @{username or '—'}\n"
+        f"*Telegram:* {telegram_link or '—'}\n"
+        f"*TG ID:* `{tg_id}`\n"
+        f"*Язык:* {language_code or '—'}\n\n"
+        f"*Сообщение:*\n{comment}"
+    )
+
+
 @tool
 async def send_to_admin(comment: str) -> str:
     """Send information to administrators.
@@ -158,18 +178,24 @@ async def send_to_admin(comment: str) -> str:
 
     if settings.admin_telegram_chat_id:
         try:
+            from aiogram.types import FSInputFile
+
             from apps.bot.app.bot_instance import bot
 
-            message_text = (
-                "📨 <b>Сообщение от пользователя</b>\n\n"
-                f"<b>Имя:</b> {first_name or '—'} {last_name or ''}\n"
-                f"<b>Username:</b> @{username or '—'}\n"
-                f"<b>Telegram:</b> {telegram_link or '—'}\n"
-                f"<b>TG ID:</b> <code>{tg_id}</code>\n"
-                f"<b>Язык:</b> {language_code or '—'}\n\n"
-                f"<b>Сообщение:</b>\n{comment}"
+            message_text = _format_admin_message_markdown(
+                first_name=first_name,
+                last_name=last_name,
+                username=username,
+                telegram_link=telegram_link,
+                tg_id=tg_id,
+                language_code=language_code,
+                comment=comment,
             )
-            await bot.send_message(int(settings.admin_telegram_chat_id), message_text)
+            await send_message_markdown_or_text(
+                bot,
+                int(settings.admin_telegram_chat_id),
+                message_text,
+            )
             delivered = True
 
             tmp_path = None
@@ -206,12 +232,11 @@ async def send_to_admin(comment: str) -> str:
                     tmp.write(md_content)
                     tmp_path = tmp.name
 
-                from aiogram.types import FSInputFile
-
                 await bot.send_document(
                     int(settings.admin_telegram_chat_id),
                     document=FSInputFile(tmp_path),
                     caption=f"История диалога @{username or tg_id}",
+                    parse_mode=None,
                 )
             except Exception as exc:
                 logger.error(

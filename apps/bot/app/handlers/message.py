@@ -22,6 +22,7 @@ from apps.bot.app.services.history_service import (
 )
 from apps.bot.app.services.language_service import require_preferred_language
 from apps.bot.app.services.settings_service import get_llm_history_messages
+from apps.bot.app.services.telegram_messages import answer_markdown_or_text
 from apps.bot.app.services.tool_log_service import log_tool_call
 
 logger = logging.getLogger(__name__)
@@ -159,7 +160,7 @@ async def process_user_text(
             history_messages=history_messages,
         )
 
-        await message.answer(final_response)
+        await answer_markdown_or_text(message, final_response)
         await save_dialogue_turn_best_effort(
             user_tg_id=user.id,
             thread_id=thread_id,
@@ -174,7 +175,8 @@ async def process_user_text(
 
     except Exception as e:
         logger.error(f"Agent error trace_id={trace_id}: {e}", exc_info=True)
-        await message.answer(
+        await answer_markdown_or_text(
+            message,
             PROCESSING_ERROR_MESSAGES.get(
                 response_language or "ru",
                 PROCESSING_ERROR_MESSAGES["ru"],
