@@ -87,6 +87,17 @@ def test_dialogue_history_to_messages_uses_human_ai_pairs_in_order():
     assert [message.content for message in messages] == ["q1", "a1", "q2", "a2"]
 
 
+def test_dialogue_history_to_messages_skips_start_welcome_records():
+    messages = history_service.dialogue_history_to_messages(
+        [
+            _record("[start]", "welcome"),
+            _record("real question", "real answer"),
+        ]
+    )
+
+    assert [message.content for message in messages] == ["real question", "real answer"]
+
+
 @pytest.mark.asyncio
 async def test_load_dialogue_history_returns_empty_when_limit_zero(monkeypatch):
     called = False

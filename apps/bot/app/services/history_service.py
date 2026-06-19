@@ -43,6 +43,8 @@ def dialogue_history_to_messages(
     """Convert dialogue rows into provider-neutral LangChain chat messages."""
     messages: list[BaseMessage] = []
     for record in records:
+        if record.user_message == "[start]":
+            continue
         messages.append(HumanMessage(content=record.user_message))
         messages.append(AIMessage(content=record.assistant_response))
     return messages

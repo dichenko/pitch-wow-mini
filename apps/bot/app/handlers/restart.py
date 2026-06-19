@@ -9,9 +9,8 @@ from aiogram.types import Message
 from apps.bot.app.agent.agent import reset_user_thread_state
 from apps.bot.app.services.language_service import (
     answer_language_selection,
-    get_preferred_language,
+    clear_preferred_language,
 )
-from apps.bot.app.services.welcome_flow import reset_thread_and_send_welcome
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -23,12 +22,7 @@ async def cmd_restart(message: Message) -> None:
         return
 
     user = message.from_user
-    language = await get_preferred_language(user)
-    if language is None:
-        await reset_user_thread_state(user.id)
-        await answer_language_selection(message)
-        logger.info("User %s restarted without language, selection requested", user.id)
-        return
-
-    await reset_thread_and_send_welcome(message, user, language)
-    logger.info("User %s restarted conversation language=%s", user.id, language)
+    await reset_user_thread_state(user.id)
+    await clear_preferred_language(user)
+    await answer_language_selection(message)
+    logger.info("User %s restarted, memory reset and language selection requested", user.id)
