@@ -3,6 +3,7 @@ from aiogram.enums import ParseMode
 from aiogram.exceptions import TelegramBadRequest
 
 from apps.bot.app.services.telegram_messages import (
+    SAFE_TEXT_CHUNK_SIZE,
     answer_markdown_or_text,
     send_message_markdown_or_text,
 )
@@ -79,3 +80,27 @@ async def test_send_message_markdown_or_text_retries_plain_text_on_markup_error(
             "kwargs": {"parse_mode": None},
         },
     ]
+
+
+@pytest.mark.asyncio
+async def test_answer_markdown_or_text_splits_long_text_as_plain_text():
+    message = _FakeMessage()
+    text = ("paragraph\n\n" * 500).strip()
+
+    await answer_markdown_or_text(message, text)
+
+    assert len(message.calls) > 1
+    assert all(len(call["text"]) <= SAFE_TEXT_CHUNK_SIZE for call in message.calls)
+    assert all(call["kwargs"]["parse_mode"] is None for call in message.calls)
+
+
+@pytest.mark.asyncio
+async def test_send_message_markdown_or_text_splits_long_text_as_plain_text():
+    bot = _FakeBot()
+    text = ("paragraph\n\n" * 500).strip()
+
+    await send_message_markdown_or_text(bot, 123, text)
+
+    assert len(bot.calls) > 1
+    assert all(len(call["text"]) <= SAFE_TEXT_CHUNK_SIZE for call in bot.calls)
+    assert all(call["kwargs"]["parse_mode"] is None for call in bot.calls)
