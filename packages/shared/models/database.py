@@ -113,7 +113,7 @@ class PromptVersion(Base):
             "kind IN ("
             "'system_prompt', 'tools_instruction', 'censor_prompt', "
             "'welcome_message', 'welcome_message_ru', 'welcome_message_uz', "
-            "'welcome_message_en'"
+            "'welcome_message_en', 'artifact_generator_prompt'"
             ")",
             name="check_prompt_kind",
         ),
@@ -203,6 +203,52 @@ class AdminNotification(Base):
     __table_args__ = (
         Index("ix_admin_notifications_trace_id", "trace_id"),
         Index("ix_admin_notifications_created_at", "created_at"),
+    )
+
+
+class ArtifactJob(Base):
+    __tablename__ = "artifact_jobs"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=generate_uuid
+    )
+    notification_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True
+    )
+    trace_id: Mapped[str] = mapped_column(Text, nullable=False)
+    user_tg_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    thread_id: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(
+        Text, nullable=False, default="pending", server_default="pending"
+    )
+    input_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    input_dialogue_md: Mapped[str | None] = mapped_column(Text, nullable=True)
+    artifact_prompt_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    artifact_model_provider: Mapped[str | None] = mapped_column(Text, nullable=True)
+    artifact_model: Mapped[str | None] = mapped_column(Text, nullable=True)
+    output_markdown: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    attempts: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    finished_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'running', 'success', 'error')",
+            name="check_artifact_job_status",
+        ),
+        Index("ix_artifact_jobs_status_created_at", "status", "created_at"),
+        Index("ix_artifact_jobs_trace_id", "trace_id"),
+        Index("ix_artifact_jobs_user_tg_id_created_at", "user_tg_id", "created_at"),
     )
 
 

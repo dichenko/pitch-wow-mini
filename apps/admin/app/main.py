@@ -11,6 +11,7 @@ from fastapi.templating import Jinja2Templates
 from apps.admin.app.config import get_settings
 from apps.admin.app.routers import (
     admins,
+    artifact_generator_prompt,
     auth,
     censor,
     dashboard,
@@ -44,6 +45,7 @@ templates = Jinja2Templates(directory=templates_dir)
 app.include_router(auth.router)
 app.include_router(dashboard.router)
 app.include_router(system_prompt.router)
+app.include_router(artifact_generator_prompt.router)
 app.include_router(tools_instruction.router)
 app.include_router(welcome.router)
 app.include_router(censor.router)

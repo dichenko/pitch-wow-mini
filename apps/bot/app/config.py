@@ -26,6 +26,11 @@ class BotSettings(AppSettings):
     # Admin notifications
     admin_telegram_chat_id: str = ""
 
+    # Artifact Generator
+    artifact_worker_poll_interval_sec: int = 5
+    artifact_generator_temperature: float = 0.3
+    artifact_generator_max_retries: int = 3
+
     # LLM
     text_llm_provider: str = "openai"
     llm_history_messages: int = 20

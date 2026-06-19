@@ -135,10 +135,27 @@ class TestPromptKinds:
             "welcome_message_ru",
             "welcome_message_uz",
             "welcome_message_en",
+            "artifact_generator_prompt",
         }
 
         assert "welcome_message" in valid_kinds
         assert {"welcome_message_ru", "welcome_message_uz", "welcome_message_en"}.issubset(valid_kinds)
+        assert "artifact_generator_prompt" in valid_kinds
+
+    def test_artifact_generator_default_prompt_has_required_documents(self):
+        from apps.bot.app.services.seed_service import DEFAULT_ARTIFACT_GENERATOR_PROMPT
+
+        required_sections = [
+            "DOCUMENT #0",
+            "DOCUMENT #1",
+            "DOCUMENT #2",
+            "DOCUMENT #3",
+            "DOCUMENT #4",
+            "QUALITY CHECK",
+        ]
+
+        for section in required_sections:
+            assert section in DEFAULT_ARTIFACT_GENERATOR_PROMPT
 
 
 class TestCensorFallback:
@@ -285,18 +302,23 @@ class TestLLMFactory:
     def test_openai_provider_name_is_recognized(self):
         """OpenAI provider string maps correctly."""
         provider = "openai"
-        assert provider in ("openai", "anthropic")
+        assert provider in ("openai", "anthropic", "mistral")
 
     def test_anthropic_provider_name_is_recognized(self):
         """Anthropic provider string maps correctly."""
         provider = "anthropic"
-        assert provider in ("openai", "anthropic")
+        assert provider in ("openai", "anthropic", "mistral")
+
+    def test_mistral_provider_name_is_recognized(self):
+        """Mistral provider string maps correctly."""
+        provider = "mistral"
+        assert provider in ("openai", "anthropic", "mistral")
 
     def test_unknown_provider_raises(self):
         """Unknown provider should raise ValueError."""
         with pytest.raises(ValueError):
             provider = "unknown_provider"
-            if provider not in ("openai", "anthropic"):
+            if provider not in ("openai", "anthropic", "mistral"):
                 raise ValueError(f"Unknown LLM provider: {provider}")
 
 
@@ -343,11 +365,12 @@ class TestSettingsValidation:
         llm_model = "gpt-4.1-mini"
         assert len(llm_model) > 0
 
-    def test_provider_restricted_to_openai_anthropic(self):
-        """Only openai and anthropic are valid providers."""
-        valid_providers = ("openai", "anthropic")
+    def test_provider_restricted_to_supported_providers(self):
+        """Only supported chat providers are valid providers."""
+        valid_providers = ("openai", "anthropic", "mistral")
         assert "openai" in valid_providers
         assert "anthropic" in valid_providers
+        assert "mistral" in valid_providers
         assert "azure" not in valid_providers
 
     def test_agent_and_censor_settings_independent(self):

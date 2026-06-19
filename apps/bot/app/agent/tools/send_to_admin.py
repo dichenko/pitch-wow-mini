@@ -16,7 +16,7 @@ from apps.bot.app.services.history_service import (
     load_user_thread_history,
 )
 from apps.bot.app.services.telegram_messages import send_message_markdown_or_text
-from packages.shared.models.database import AdminNotification, DialogueHistory
+from packages.shared.models.database import AdminNotification, ArtifactJob, DialogueHistory
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -257,6 +257,7 @@ async def send_to_admin(comment: str) -> str:
                 exc_info=True,
             )
 
+    notification_id = None
     try:
         async with async_session_factory() as session:
             notification = AdminNotification(
@@ -273,6 +274,8 @@ async def send_to_admin(comment: str) -> str:
                 delivery_error=delivery_error,
             )
             session.add(notification)
+            await session.flush()
+            notification_id = notification.id
             await session.commit()
     except Exception as exc:
         logger.error(
@@ -281,6 +284,29 @@ async def send_to_admin(comment: str) -> str:
             exc,
             exc_info=True,
         )
+
+    if notification_id:
+        try:
+            async with async_session_factory() as session:
+                session.add(
+                    ArtifactJob(
+                        notification_id=notification_id,
+                        trace_id=trace_id,
+                        user_tg_id=tg_id,
+                        thread_id=current_thread_id or str(tg_id),
+                        input_comment=comment,
+                        status="pending",
+                    )
+                )
+                await session.commit()
+        except Exception as exc:
+            logger.error(
+                "Failed to create artifact job trace_id=%s notification_id=%s: %s",
+                trace_id,
+                notification_id,
+                exc,
+                exc_info=True,
+            )
 
     duration_ms = int((time.time() - start_time) * 1000)
     logger.info(
