@@ -24,7 +24,7 @@ class FakeMessage:
 async def test_start_always_resets_memory_and_requests_language(monkeypatch):
     calls = []
 
-    def reset_user_thread(user_id):
+    async def reset_user_thread_state(user_id):
         calls.append(("reset", user_id))
 
     async def clear_preferred_language(user):
@@ -34,7 +34,7 @@ async def test_start_always_resets_memory_and_requests_language(monkeypatch):
         calls.append(("language_menu", message.from_user.id))
         await message.answer("language menu")
 
-    monkeypatch.setattr(start_module, "reset_user_thread", reset_user_thread)
+    monkeypatch.setattr(start_module, "reset_user_thread_state", reset_user_thread_state)
     monkeypatch.setattr(start_module, "clear_preferred_language", clear_preferred_language)
     monkeypatch.setattr(start_module, "answer_language_selection", answer_language_selection)
 

@@ -64,7 +64,10 @@ async def test_process_user_text_uses_explicit_text_for_voice_messages(monkeypat
     monkeypatch.setattr(message_module, "assemble_prompt", assemble_prompt)
     monkeypatch.setattr(message_module, "create_agent", create_agent)
     monkeypatch.setattr(message_module, "apply_censor", apply_censor)
-    monkeypatch.setattr(message_module, "get_thread_id", lambda user_id: f"{user_id}")
+    async def get_current_thread_id(user_id):
+        return f"{user_id}"
+
+    monkeypatch.setattr(message_module, "get_current_thread_id", get_current_thread_id)
     monkeypatch.setattr(message_module, "get_llm_history_messages", get_llm_history_messages)
     monkeypatch.setattr(message_module, "load_dialogue_history", load_dialogue_history)
     monkeypatch.setattr(

@@ -6,6 +6,7 @@ from aiogram import Router
 from aiogram.filters import Command
 from aiogram.types import Message
 
+from apps.bot.app.agent.agent import reset_user_thread_state
 from apps.bot.app.services.language_service import (
     answer_language_selection,
     get_preferred_language,
@@ -24,6 +25,7 @@ async def cmd_restart(message: Message) -> None:
     user = message.from_user
     language = await get_preferred_language(user)
     if language is None:
+        await reset_user_thread_state(user.id)
         await answer_language_selection(message)
         logger.info("User %s restarted without language, selection requested", user.id)
         return

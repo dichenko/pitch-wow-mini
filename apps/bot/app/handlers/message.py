@@ -10,7 +10,7 @@ from aiogram.filters import Command
 from aiogram.types import Message
 from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 
-from apps.bot.app.agent.agent import create_agent, get_thread_id
+from apps.bot.app.agent.agent import create_agent, get_current_thread_id
 from apps.bot.app.agent.prompt_assembler import assemble_prompt
 from apps.bot.app.agent.tools.send_to_admin import set_tool_context
 from apps.bot.app.config import get_settings
@@ -77,7 +77,7 @@ async def process_user_text(
 
     trace_id = str(uuid.uuid4())
     user = message.from_user
-    thread_id = get_thread_id(user.id)
+    thread_id = await get_current_thread_id(user.id)
 
     # Set tool context so tools can access user data
     set_tool_context(

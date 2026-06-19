@@ -153,6 +153,26 @@ class UserProfile(Base):
     )
 
 
+class UserConversationState(Base):
+    __tablename__ = "user_conversation_states"
+
+    user_tg_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    reset_counter: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    current_thread_id: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (
+        Index("ix_user_conversation_states_updated_at", "updated_at"),
+    )
+
+
 class AdminAuditLog(Base):
     __tablename__ = "admin_audit_log"
 

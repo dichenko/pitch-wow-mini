@@ -146,6 +146,106 @@ def test_reset_thread_excludes_previous_thread_history():
     assert after == "183866240_1"
 
 
+@pytest.mark.asyncio
+async def test_persistent_reset_avoids_reusing_history_threads_after_process_restart(monkeypatch):
+    from apps.bot.app.agent import agent as agent_module
+    from packages.shared.models.database import UserConversationState
+
+    _user_reset_counters.clear()
+    added = []
+
+    class Result:
+        def __init__(self, values):
+            self.values = values
+
+        def scalar_one_or_none(self):
+            return None
+
+        def scalars(self):
+            return self
+
+        def all(self):
+            return self.values
+
+    class Transaction:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+    class Session:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+        def begin(self):
+            return Transaction()
+
+        async def execute(self, statement):
+            text = str(statement)
+            if "user_conversation_states" in text:
+                return Result([])
+            return Result(["183866240", "183866240_1"])
+
+        def add(self, item):
+            added.append(item)
+
+    monkeypatch.setattr(agent_module, "async_session_factory", lambda: Session())
+
+    thread_id = await agent_module.reset_user_thread_state(183866240)
+
+    assert thread_id == "183866240_2"
+    assert len(added) == 1
+    assert isinstance(added[0], UserConversationState)
+    assert added[0].reset_counter == 2
+    assert added[0].current_thread_id == "183866240_2"
+    assert _user_reset_counters[183866240] == 2
+
+
+@pytest.mark.asyncio
+async def test_get_current_thread_id_restores_latest_history_thread_when_state_missing(monkeypatch):
+    from apps.bot.app.agent import agent as agent_module
+
+    _user_reset_counters.clear()
+    added = []
+
+    class Result:
+        def scalar_one_or_none(self):
+            return "183866240_3"
+
+    class Session:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+        async def get(self, model, key):
+            return None
+
+        async def execute(self, statement):
+            return Result()
+
+        def add(self, item):
+            added.append(item)
+
+        async def commit(self):
+            return None
+
+    monkeypatch.setattr(agent_module, "async_session_factory", lambda: Session())
+
+    thread_id = await agent_module.get_current_thread_id(183866240)
+
+    assert thread_id == "183866240_3"
+    assert len(added) == 1
+    assert added[0].reset_counter == 3
+    assert added[0].current_thread_id == "183866240_3"
+    assert _user_reset_counters[183866240] == 3
+
+
 @pytest.mark.parametrize("provider", ["openai", "anthropic", "mistral"])
 @pytest.mark.asyncio
 async def test_process_user_text_sends_history_through_common_path(monkeypatch, provider):
@@ -182,7 +282,10 @@ async def test_process_user_text_sends_history_through_common_path(monkeypatch, 
         "save_dialogue_turn_best_effort",
         save_dialogue_turn_best_effort,
     )
-    monkeypatch.setattr(message_module, "get_thread_id", lambda user_id: str(user_id))
+    async def get_current_thread_id(user_id):
+        return str(user_id)
+
+    monkeypatch.setattr(message_module, "get_current_thread_id", get_current_thread_id)
 
     message = _FakeMessage()
     await message_module.process_user_text(message=message, user_text="current question")
@@ -242,7 +345,10 @@ async def test_process_user_text_sends_typing_before_agent_invocation(monkeypatc
         "save_dialogue_turn_best_effort",
         save_dialogue_turn_best_effort,
     )
-    monkeypatch.setattr(message_module, "get_thread_id", lambda user_id: str(user_id))
+    async def get_current_thread_id(user_id):
+        return str(user_id)
+
+    monkeypatch.setattr(message_module, "get_current_thread_id", get_current_thread_id)
 
     message = _FakeMessage(events=events)
     await message_module.process_user_text(message=message, user_text="current question")
@@ -283,7 +389,10 @@ async def test_process_user_text_continues_when_typing_activity_fails(monkeypatc
         "save_dialogue_turn_best_effort",
         save_dialogue_turn_best_effort,
     )
-    monkeypatch.setattr(message_module, "get_thread_id", lambda user_id: str(user_id))
+    async def get_current_thread_id(user_id):
+        return str(user_id)
+
+    monkeypatch.setattr(message_module, "get_current_thread_id", get_current_thread_id)
 
     events = []
     message = _FakeMessage(
@@ -319,10 +428,14 @@ async def test_process_user_text_does_not_save_history_when_agent_fails(monkeypa
     async def save_dialogue_turn_best_effort(**kwargs):
         saved.append(kwargs)
 
+    async def get_current_thread_id(user_id):
+        return str(user_id)
+
     monkeypatch.setattr(message_module, "assemble_prompt", assemble_prompt)
     monkeypatch.setattr(message_module, "get_llm_history_messages", get_llm_history_messages)
     monkeypatch.setattr(message_module, "load_dialogue_history", load_dialogue_history)
     monkeypatch.setattr(message_module, "create_agent", create_agent)
+    monkeypatch.setattr(message_module, "get_current_thread_id", get_current_thread_id)
     monkeypatch.setattr(
         message_module,
         "save_dialogue_turn_best_effort",
