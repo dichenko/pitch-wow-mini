@@ -482,6 +482,64 @@ async def test_process_user_text_notifies_when_fallback_provider_also_fails(monk
 
 
 @pytest.mark.asyncio
+async def test_provider_failure_alert_uses_admin_telegram_chat_id(monkeypatch):
+    sent = []
+    added = []
+
+    async def send_message_markdown_or_text(bot, chat_id, text, **kwargs):
+        sent.append({"chat_id": chat_id, "text": text})
+
+    class Session:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+        def add(self, item):
+            added.append(item)
+
+        async def commit(self):
+            return None
+
+    monkeypatch.setattr(
+        message_module.settings,
+        "admin_telegram_chat_id",
+        "-5210836036",
+        raising=False,
+    )
+    monkeypatch.setattr(
+        message_module,
+        "send_message_markdown_or_text",
+        send_message_markdown_or_text,
+    )
+    monkeypatch.setattr(message_module, "async_session_factory", lambda: Session())
+
+    await message_module._notify_provider_failure(
+        trace_id="trace-1",
+        user_data={
+            "tg_id": 183866240,
+            "first_name": "Test",
+            "last_name": None,
+            "username": "test_user",
+            "language_code": "ru",
+        },
+        thread_id="183866240",
+        provider="mistral",
+        model="mistral-large-latest",
+        stage="primary",
+        error=RuntimeError("unauthorized"),
+        fallback_provider="openai",
+        fallback_model="gpt-4.1-mini",
+        user_text="hello",
+    )
+
+    assert sent[0]["chat_id"] == -5210836036
+    assert added[0].delivered is True
+    assert added[0].delivery_error is None
+
+
+@pytest.mark.asyncio
 async def test_process_user_text_continues_when_typing_activity_fails(monkeypatch):
     fake_agent = _FakeAgent("openai")
 

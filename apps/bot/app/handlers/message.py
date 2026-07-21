@@ -39,7 +39,6 @@ logger = logging.getLogger(__name__)
 router = Router()
 settings = get_settings()
 
-PROVIDER_FAILURE_ADMIN_CHAT_ID = 5210836036
 FALLBACK_LLM_PROVIDER = "openai"
 
 PROCESSING_ERROR_MESSAGES = {
@@ -498,7 +497,7 @@ async def _notify_provider_failure(
 
         await send_message_markdown_or_text(
             bot,
-            PROVIDER_FAILURE_ADMIN_CHAT_ID,
+            _provider_failure_admin_chat_id(),
             comment,
         )
         delivered = True
@@ -510,7 +509,6 @@ async def _notify_provider_failure(
             exc,
             exc_info=True,
         )
-
     try:
         async with async_session_factory() as session:
             session.add(
@@ -546,3 +544,9 @@ async def _notify_provider_failure(
             exc,
             exc_info=True,
         )
+
+
+def _provider_failure_admin_chat_id() -> int:
+    if not settings.admin_telegram_chat_id:
+        raise ValueError("ADMIN_TELEGRAM_CHAT_ID is not set")
+    return int(settings.admin_telegram_chat_id)
