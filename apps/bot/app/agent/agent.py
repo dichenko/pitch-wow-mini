@@ -137,10 +137,16 @@ def _sync_memory_counter(user_tg_id: int, counter: int) -> None:
     _user_reset_counters[user_tg_id] = max(counter, _user_reset_counters.get(user_tg_id, 0))
 
 
-async def create_agent(system_prompt: str, trace_id: str, prompt_meta: dict):
+async def create_agent(
+    system_prompt: str,
+    trace_id: str,
+    prompt_meta: dict,
+    provider_override: str | None = None,
+    model_override: str | None = None,
+):
     """Create a LangGraph ReAct agent with all registered tools."""
-    provider = await get_llm_provider()
-    model = await get_llm_model()
+    provider = provider_override or await get_llm_provider()
+    model = model_override or await get_llm_model()
 
     llm = create_llm(provider=provider, model=model, temperature=0.7)
     tools = get_all_tools()

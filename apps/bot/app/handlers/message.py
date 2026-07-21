@@ -3,6 +3,7 @@
 import logging
 import time
 import uuid
+from datetime import datetime, timezone
 
 from aiogram import Router
 from aiogram.enums import ChatAction
@@ -13,6 +14,7 @@ from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 from apps.bot.app.agent.agent import create_agent, get_current_thread_id
 from apps.bot.app.agent.prompt_assembler import assemble_prompt
 from apps.bot.app.agent.tools.send_to_admin import set_tool_context
+from apps.bot.app.db.session import async_session_factory
 from apps.bot.app.config import get_settings
 from apps.bot.app.services.censor_service import apply_censor
 from apps.bot.app.services.history_service import (
@@ -21,13 +23,24 @@ from apps.bot.app.services.history_service import (
     save_dialogue_turn_best_effort,
 )
 from apps.bot.app.services.language_service import require_preferred_language
-from apps.bot.app.services.settings_service import get_llm_history_messages
-from apps.bot.app.services.telegram_messages import answer_markdown_or_text
+from apps.bot.app.services.settings_service import (
+    get_llm_history_messages,
+    get_llm_model,
+    get_llm_provider,
+)
+from apps.bot.app.services.telegram_messages import (
+    answer_markdown_or_text,
+    send_message_markdown_or_text,
+)
 from apps.bot.app.services.tool_log_service import log_tool_call
+from packages.shared.models.database import AdminNotification
 
 logger = logging.getLogger(__name__)
 router = Router()
 settings = get_settings()
+
+PROVIDER_FAILURE_ADMIN_CHAT_ID = 5210836036
+FALLBACK_LLM_PROVIDER = "openai"
 
 PROCESSING_ERROR_MESSAGES = {
     "ru": "Извините, произошла ошибка при обработке вашего сообщения. Попробуйте позже.",
@@ -110,18 +123,6 @@ async def process_user_text(
         if response_language:
             prompt_meta["response_language"] = response_language
 
-        # Create agent
-        agent = await create_agent(
-            system_prompt=system_prompt, trace_id=trace_id, prompt_meta=prompt_meta
-        )
-
-        # Build LangSmith config with metadata and tags
-        config = {
-            "metadata": getattr(agent, "metadata", {}),
-            "tags": getattr(agent, "tags", []),
-            "configurable": {"thread_id": thread_id},
-        }
-
         # Invoke agent with config
         language_instruction = _response_language_instruction(response_language)
         input_messages = [*history_messages]
@@ -129,9 +130,76 @@ async def process_user_text(
             input_messages.append(SystemMessage(content=language_instruction))
         input_messages.append(HumanMessage(content=user_text))
 
-        response = await agent.ainvoke(
-            {"messages": input_messages},
-            config=config,
+        try:
+            agent = await create_agent(
+                system_prompt=system_prompt,
+                trace_id=trace_id,
+                prompt_meta=prompt_meta,
+            )
+        except Exception as primary_exc:
+            primary_provider = await _safe_current_provider()
+            primary_model = await _safe_current_model()
+            logger.error(
+                "Primary LLM provider initialization failed trace_id=%s "
+                "provider=%s model=%s: %s",
+                trace_id,
+                primary_provider,
+                primary_model,
+                primary_exc,
+                exc_info=True,
+            )
+            await _notify_provider_failure(
+                trace_id=trace_id,
+                user_data={
+                    "tg_id": user.id,
+                    "first_name": user.first_name,
+                    "last_name": user.last_name,
+                    "username": user.username,
+                    "language_code": user.language_code,
+                },
+                thread_id=thread_id,
+                provider=primary_provider,
+                model=primary_model,
+                stage="primary_init",
+                error=primary_exc,
+                fallback_provider=FALLBACK_LLM_PROVIDER,
+                fallback_model=settings.openai_text_model,
+                user_text=user_text,
+            )
+            agent = await _create_fallback_agent_or_notify(
+                system_prompt=system_prompt,
+                trace_id=trace_id,
+                prompt_meta=prompt_meta,
+                thread_id=thread_id,
+                user_data={
+                    "tg_id": user.id,
+                    "first_name": user.first_name,
+                    "last_name": user.last_name,
+                    "username": user.username,
+                    "language_code": user.language_code,
+                },
+                user_text=user_text,
+            )
+            allow_fallback = False
+        else:
+            allow_fallback = True
+
+        agent, response = await _invoke_agent_with_provider_fallback(
+            agent=agent,
+            input_messages=input_messages,
+            system_prompt=system_prompt,
+            trace_id=trace_id,
+            prompt_meta=prompt_meta,
+            thread_id=thread_id,
+            user_data={
+                "tg_id": user.id,
+                "first_name": user.first_name,
+                "last_name": user.last_name,
+                "username": user.username,
+                "language_code": user.language_code,
+            },
+            user_text=user_text,
+            allow_fallback=allow_fallback,
         )
 
         # Log tool calls from the response
@@ -202,3 +270,279 @@ def _response_language_instruction(language: str | None) -> str | None:
             "Do not switch to Russian or Uzbek unless the user explicitly asks."
         )
     return None
+
+
+def _agent_config(agent, thread_id: str) -> dict:
+    return {
+        "metadata": getattr(agent, "metadata", {}),
+        "tags": getattr(agent, "tags", []),
+        "configurable": {"thread_id": thread_id},
+    }
+
+
+async def _safe_current_provider() -> str:
+    try:
+        return await get_llm_provider()
+    except Exception as exc:
+        logger.warning("Failed to read current LLM provider: %s", exc, exc_info=True)
+        return "unknown"
+
+
+async def _safe_current_model() -> str:
+    try:
+        return await get_llm_model()
+    except Exception as exc:
+        logger.warning("Failed to read current LLM model: %s", exc, exc_info=True)
+        return "unknown"
+
+
+async def _invoke_agent_with_provider_fallback(
+    agent,
+    input_messages: list,
+    system_prompt: str,
+    trace_id: str,
+    prompt_meta: dict,
+    thread_id: str,
+    user_data: dict,
+    user_text: str,
+    allow_fallback: bool = True,
+) -> tuple[object, dict]:
+    primary_provider = getattr(agent, "metadata", {}).get("llm_provider")
+    primary_model = getattr(agent, "metadata", {}).get("llm_model")
+
+    try:
+        response = await agent.ainvoke(
+            {"messages": input_messages},
+            config=_agent_config(agent, thread_id),
+        )
+        return agent, response
+    except Exception as primary_exc:
+        if not allow_fallback:
+            logger.error(
+                "Fallback LLM provider failed trace_id=%s provider=%s model=%s: %s",
+                trace_id,
+                primary_provider,
+                primary_model,
+                primary_exc,
+                exc_info=True,
+            )
+            await _notify_provider_failure(
+                trace_id=trace_id,
+                user_data=user_data,
+                thread_id=thread_id,
+                provider=primary_provider or FALLBACK_LLM_PROVIDER,
+                model=primary_model or settings.openai_text_model,
+                stage="fallback",
+                error=primary_exc,
+                fallback_provider=None,
+                fallback_model=None,
+                user_text=user_text,
+            )
+            raise primary_exc
+
+        logger.error(
+            "Primary LLM provider failed trace_id=%s provider=%s model=%s: %s",
+            trace_id,
+            primary_provider,
+            primary_model,
+            primary_exc,
+            exc_info=True,
+        )
+        await _notify_provider_failure(
+            trace_id=trace_id,
+            user_data=user_data,
+            thread_id=thread_id,
+            provider=primary_provider or "unknown",
+            model=primary_model or "unknown",
+            stage="primary",
+            error=primary_exc,
+            fallback_provider=FALLBACK_LLM_PROVIDER,
+            fallback_model=settings.openai_text_model,
+            user_text=user_text,
+        )
+
+    fallback_agent = await _create_fallback_agent_or_notify(
+        system_prompt=system_prompt,
+        trace_id=trace_id,
+        prompt_meta=prompt_meta,
+        thread_id=thread_id,
+        user_data=user_data,
+        user_text=user_text,
+    )
+
+    try:
+        response = await fallback_agent.ainvoke(
+            {"messages": input_messages},
+            config=_agent_config(fallback_agent, thread_id),
+        )
+        logger.info(
+            "Fallback LLM provider succeeded trace_id=%s provider=%s model=%s",
+            trace_id,
+            FALLBACK_LLM_PROVIDER,
+            settings.openai_text_model,
+        )
+        return fallback_agent, response
+    except Exception as fallback_exc:
+        logger.error(
+            "Fallback LLM provider failed trace_id=%s provider=%s model=%s: %s",
+            trace_id,
+            FALLBACK_LLM_PROVIDER,
+            settings.openai_text_model,
+            fallback_exc,
+            exc_info=True,
+        )
+        await _notify_provider_failure(
+            trace_id=trace_id,
+            user_data=user_data,
+            thread_id=thread_id,
+            provider=FALLBACK_LLM_PROVIDER,
+            model=settings.openai_text_model,
+            stage="fallback",
+            error=fallback_exc,
+            fallback_provider=None,
+            fallback_model=None,
+            user_text=user_text,
+        )
+        raise
+
+
+async def _create_fallback_agent_or_notify(
+    system_prompt: str,
+    trace_id: str,
+    prompt_meta: dict,
+    thread_id: str,
+    user_data: dict,
+    user_text: str,
+):
+    try:
+        return await create_agent(
+            system_prompt=system_prompt,
+            trace_id=trace_id,
+            prompt_meta=prompt_meta,
+            provider_override=FALLBACK_LLM_PROVIDER,
+            model_override=settings.openai_text_model,
+        )
+    except Exception as fallback_exc:
+        logger.error(
+            "Fallback LLM provider initialization failed trace_id=%s "
+            "provider=%s model=%s: %s",
+            trace_id,
+            FALLBACK_LLM_PROVIDER,
+            settings.openai_text_model,
+            fallback_exc,
+            exc_info=True,
+        )
+        await _notify_provider_failure(
+            trace_id=trace_id,
+            user_data=user_data,
+            thread_id=thread_id,
+            provider=FALLBACK_LLM_PROVIDER,
+            model=settings.openai_text_model,
+            stage="fallback_init",
+            error=fallback_exc,
+            fallback_provider=None,
+            fallback_model=None,
+            user_text=user_text,
+        )
+        raise
+
+
+async def _notify_provider_failure(
+    trace_id: str,
+    user_data: dict,
+    thread_id: str,
+    provider: str,
+    model: str,
+    stage: str,
+    error: Exception,
+    fallback_provider: str | None,
+    fallback_model: str | None,
+    user_text: str,
+) -> None:
+    timestamp = datetime.now(timezone.utc).isoformat()
+    error_text = str(error)
+    if len(error_text) > 1500:
+        error_text = f"{error_text[:1500]}..."
+
+    tg_id = int(user_data.get("tg_id") or 0)
+    username = user_data.get("username")
+    first_name = user_data.get("first_name")
+    last_name = user_data.get("last_name")
+    language_code = user_data.get("language_code")
+    telegram_link = f"https://t.me/{username}" if username else None
+
+    next_step = (
+        f"Retrying with {fallback_provider}/{fallback_model}"
+        if fallback_provider and fallback_model
+        else "No further fallback configured"
+    )
+    comment = (
+        "LLM provider failure\n\n"
+        f"Stage: {stage}\n"
+        f"Provider: {provider}\n"
+        f"Model: {model}\n"
+        f"Trace ID: {trace_id}\n"
+        f"Thread ID: {thread_id}\n"
+        f"User TG ID: {tg_id}\n"
+        f"Username: @{username or '-'}\n"
+        f"Next step: {next_step}\n\n"
+        f"Error:\n{error_text}\n\n"
+        f"User message:\n{user_text[:1000]}"
+    )
+
+    delivered = False
+    delivery_error = None
+
+    try:
+        from apps.bot.app.bot_instance import bot
+
+        await send_message_markdown_or_text(
+            bot,
+            PROVIDER_FAILURE_ADMIN_CHAT_ID,
+            comment,
+        )
+        delivered = True
+    except Exception as exc:
+        delivery_error = str(exc)
+        logger.error(
+            "Failed to send provider failure alert trace_id=%s: %s",
+            trace_id,
+            exc,
+            exc_info=True,
+        )
+
+    try:
+        async with async_session_factory() as session:
+            session.add(
+                AdminNotification(
+                    trace_id=trace_id,
+                    user_tg_id=tg_id,
+                    first_name=first_name,
+                    last_name=last_name,
+                    username=username,
+                    telegram_link=telegram_link,
+                    language_code=language_code,
+                    comment=comment,
+                    payload={
+                        "type": "llm_provider_failure",
+                        "stage": stage,
+                        "provider": provider,
+                        "model": model,
+                        "fallback_provider": fallback_provider,
+                        "fallback_model": fallback_model,
+                        "thread_id": thread_id,
+                        "trace_id": trace_id,
+                        "created_at": timestamp,
+                    },
+                    delivered=delivered,
+                    delivery_error=delivery_error,
+                )
+            )
+            await session.commit()
+    except Exception as exc:
+        logger.error(
+            "Failed to save provider failure alert trace_id=%s: %s",
+            trace_id,
+            exc,
+            exc_info=True,
+        )

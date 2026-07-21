@@ -54,13 +54,17 @@ class _FakeAgentMessage:
 class _FakeAgent:
     tags = []
 
-    def __init__(self, provider):
+    def __init__(self, provider, fail=False, response_text="draft response"):
         self.metadata = {"llm_provider": provider, "llm_model": f"{provider}-model"}
+        self.fail = fail
+        self.response_text = response_text
         self.calls = []
 
     async def ainvoke(self, payload, config):
         self.calls.append({"payload": payload, "config": config})
-        return {"messages": [_FakeAgentMessage("draft response")]}
+        if self.fail:
+            raise RuntimeError(f"{self.metadata['llm_provider']} unavailable")
+        return {"messages": [_FakeAgentMessage(self.response_text)]}
 
 
 def _record(user_message, assistant_response, thread_id="183866240"):
@@ -366,6 +370,115 @@ async def test_process_user_text_sends_typing_before_agent_invocation(monkeypatc
 
     assert events == [("typing", 183866240, ChatAction.TYPING)]
     assert message.answers == ["draft response"]
+
+
+@pytest.mark.asyncio
+async def test_process_user_text_falls_back_to_openai_when_primary_provider_fails(monkeypatch):
+    primary_agent = _FakeAgent("mistral", fail=True)
+    fallback_agent = _FakeAgent("openai", response_text="fallback draft")
+    notifications = []
+    saved = []
+
+    async def assemble_prompt():
+        return "system prompt", {}
+
+    async def create_agent(**kwargs):
+        if kwargs.get("provider_override") == "openai":
+            return fallback_agent
+        return primary_agent
+
+    async def get_llm_history_messages():
+        return 0
+
+    async def load_dialogue_history(**kwargs):
+        return []
+
+    async def apply_censor(**kwargs):
+        return "fallback final"
+
+    async def save_dialogue_turn_best_effort(**kwargs):
+        saved.append(kwargs)
+
+    async def notify_provider_failure(**kwargs):
+        notifications.append(kwargs)
+
+    async def get_current_thread_id(user_id):
+        return str(user_id)
+
+    monkeypatch.setattr(message_module, "assemble_prompt", assemble_prompt)
+    monkeypatch.setattr(message_module, "create_agent", create_agent)
+    monkeypatch.setattr(message_module, "get_llm_history_messages", get_llm_history_messages)
+    monkeypatch.setattr(message_module, "load_dialogue_history", load_dialogue_history)
+    monkeypatch.setattr(message_module, "apply_censor", apply_censor)
+    monkeypatch.setattr(message_module, "save_dialogue_turn_best_effort", save_dialogue_turn_best_effort)
+    monkeypatch.setattr(message_module, "_notify_provider_failure", notify_provider_failure)
+    monkeypatch.setattr(message_module, "get_current_thread_id", get_current_thread_id)
+
+    message = _FakeMessage()
+    result = await message_module.process_user_text(
+        message=message,
+        user_text="current question",
+    )
+
+    assert result == "fallback final"
+    assert message.answers == ["fallback final"]
+    assert [n["stage"] for n in notifications] == ["primary"]
+    assert notifications[0]["provider"] == "mistral"
+    assert notifications[0]["fallback_provider"] == "openai"
+    assert saved[0]["llm_provider"] == "openai"
+    assert saved[0]["llm_model"] == "openai-model"
+
+
+@pytest.mark.asyncio
+async def test_process_user_text_notifies_when_fallback_provider_also_fails(monkeypatch):
+    primary_agent = _FakeAgent("mistral", fail=True)
+    fallback_agent = _FakeAgent("openai", fail=True)
+    notifications = []
+    saved = []
+
+    async def assemble_prompt():
+        return "system prompt", {}
+
+    async def create_agent(**kwargs):
+        if kwargs.get("provider_override") == "openai":
+            return fallback_agent
+        return primary_agent
+
+    async def get_llm_history_messages():
+        return 0
+
+    async def load_dialogue_history(**kwargs):
+        return []
+
+    async def save_dialogue_turn_best_effort(**kwargs):
+        saved.append(kwargs)
+
+    async def notify_provider_failure(**kwargs):
+        notifications.append(kwargs)
+
+    async def get_current_thread_id(user_id):
+        return str(user_id)
+
+    monkeypatch.setattr(message_module, "assemble_prompt", assemble_prompt)
+    monkeypatch.setattr(message_module, "create_agent", create_agent)
+    monkeypatch.setattr(message_module, "get_llm_history_messages", get_llm_history_messages)
+    monkeypatch.setattr(message_module, "load_dialogue_history", load_dialogue_history)
+    monkeypatch.setattr(message_module, "save_dialogue_turn_best_effort", save_dialogue_turn_best_effort)
+    monkeypatch.setattr(message_module, "_notify_provider_failure", notify_provider_failure)
+    monkeypatch.setattr(message_module, "get_current_thread_id", get_current_thread_id)
+
+    message = _FakeMessage()
+    result = await message_module.process_user_text(
+        message=message,
+        user_text="current question",
+    )
+
+    assert result is None
+    assert len(message.answers) == 1
+    assert saved == []
+    assert [n["stage"] for n in notifications] == ["primary", "fallback"]
+    assert notifications[0]["provider"] == "mistral"
+    assert notifications[1]["provider"] == "openai"
 
 
 @pytest.mark.asyncio
