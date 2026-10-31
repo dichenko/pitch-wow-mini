@@ -85,6 +85,7 @@ async def process_user_text(
     if not message.from_user or not user_text:
         return None
 
+    user_message_at = getattr(message, "date", None) or datetime.now(timezone.utc)
     await send_typing_activity(message)
 
     trace_id = str(uuid.uuid4())
@@ -236,6 +237,7 @@ async def process_user_text(
             assistant_response=final_response,
             llm_provider=getattr(agent, "metadata", {}).get("llm_provider"),
             llm_model=getattr(agent, "metadata", {}).get("llm_model"),
+            user_message_at=user_message_at,
         )
         logger.info(f"Message processed trace_id={trace_id} thread_id={thread_id} user_tg_id={user.id}")
         return final_response

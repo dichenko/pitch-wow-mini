@@ -1,5 +1,7 @@
 """User language profile helpers for Telegram bot flows."""
 
+from datetime import datetime, timezone
+
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message, User
 from sqlalchemy import select
 
@@ -60,6 +62,9 @@ async def upsert_user_profile(user: User) -> UserProfile:
         profile.last_name = user.last_name
         profile.username = user.username
         profile.language_code = user.language_code
+        # Refresh on every arrival, even when identity fields are unchanged.
+        # The inactivity worker must see activity before the response is saved.
+        profile.updated_at = datetime.now(timezone.utc)
 
         await session.commit()
         await session.refresh(profile)

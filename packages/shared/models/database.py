@@ -302,6 +302,36 @@ class DailyUserReview(Base):
     )
 
 
+class InactivityReview(Base):
+    __tablename__ = "inactivity_reviews"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=generate_uuid
+    )
+    user_tg_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    last_history_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_user_message_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    completed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    first_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    username: Mapped[str | None] = mapped_column(Text, nullable=True)
+    transcript_markdown: Mapped[str] = mapped_column(Text, nullable=False)
+    review_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    next_attempt_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    superseded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("user_tg_id", "last_history_id", name="uq_inactivity_review_history"),
+        Index("ix_inactivity_reviews_delivery", "sent_at", "superseded_at", "next_attempt_at"),
+    )
+
+
 class CensorRun(Base):
     __tablename__ = "censor_runs"
 
@@ -343,6 +373,7 @@ class DialogueHistory(Base):
     assistant_response: Mapped[str] = mapped_column(Text, nullable=False)
     llm_provider: Mapped[str | None] = mapped_column(Text, nullable=True)
     llm_model: Mapped[str | None] = mapped_column(Text, nullable=True)
+    user_message_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

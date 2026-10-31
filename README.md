@@ -173,38 +173,50 @@ The notification is followed by a Markdown transcript for the current session. A
 background artifact job receives a snapshot including the user message that
 triggered the tool, then sends its generated package to the same chat.
 
-### Daily User Reviews
+### Inactive Conversation Reviews
 
-The `daily-review-worker` service sends one Markdown file per user at **23:55
-Europe/Moscow (UTC+3)**, covering the preceding 24 hours across all their sessions.
-This runs independently of `send_to_admin`; days with no dialogue send no files.
-Each file includes the available name, username, Telegram ID, reporting period,
-three short Russian review sentences (topic, outcome/next step, completion), and
-the full period transcript. If completion is unclear, the review says so.
+The `inactivity-review-worker` service checks stored conversations every **10
+minutes**. If the user has sent no messages for **more than 60 minutes**, it sends
+one Markdown report to `ADMIN_TELEGRAM_CHAT_ID`, independently of `send_to_admin`.
+The former 23:55 daily schedule is removed.
 
-The review uses the text provider and model selected in the admin settings. If
-summarization fails, the file still arrives with an explicit fallback and the full
-transcript. Telegram delivery failures retry after five minutes; successful
-reports and scheduling progress are persisted in PostgreSQL, so restarting the
-worker does not normally resend files. A crash after Telegram accepts a file but
-before the database commit can still cause a duplicate.
+Each file includes the available name, username, Telegram ID, `t.me/username`
+profile link, first stored interaction time, last user message time and closure
+detection time in **Europe/Moscow (UTC+3)**. A three-to-four-sentence Russian
+summary is followed by the **full saved history across all sessions**, oldest
+first. Closure is explicitly technical inactivity, not a claim that all questions
+were resolved. Without a username the file says no public profile link is available.
+
+New dialogue turns record incoming Telegram message time separately from the
+later persistence of the assistant response. Older records use their saved time.
+Only saved turns can be exported; opening the bot before selecting a language does
+not yet create a transcript. Recent profile activity postpones closure while an
+incoming request is being processed.
+
+The summary uses the provider/model selected in the admin settings. If the model
+fails, the full file still arrives with an explicit unavailable-summary notice.
+Failed Telegram uploads retry; successful reports are persisted and do not repeat
+for unchanged history after a restart. If the user returns, the next inactivity
+period produces a new full-history report. Pending stale reports are superseded;
+activity is checked again immediately before upload. A crash after Telegram
+accepts a file but before the database commit can still produce a duplicate.
+
+The first scan also reports historical inactive users not yet recorded in the new
+queue. No daily cursor or old daily delivery status is reused.
 
 Defaults work without changes to an existing `.env`:
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `DAILY_REVIEWS_ENABLED` | `true` | Enable scheduling and delivery |
-| `DAILY_REVIEW_HOUR` | `23` | Moscow schedule hour |
-| `DAILY_REVIEW_MINUTE` | `55` | Moscow schedule minute |
-| `DAILY_REVIEW_POLL_INTERVAL_SEC` | `30` | Scheduling/delivery polling interval |
-| `DAILY_REVIEW_RETRY_INTERVAL_SEC` | `300` | Delay after a failed file upload |
-| `DAILY_REVIEW_LLM_TIMEOUT_SEC` | `60` | Summary generation timeout |
+| `INACTIVITY_REVIEWS_ENABLED` | `true` | Enable detection and delivery |
+| `INACTIVITY_REVIEW_POLL_INTERVAL_SEC` | `600` | Check every ten minutes |
+| `INACTIVITY_TIMEOUT_MINUTES` | `60` | Strictly greater than this inactivity threshold |
+| `INACTIVITY_REVIEW_RETRY_INTERVAL_SEC` | `600` | Delay after a failed upload |
+| `INACTIVITY_REVIEW_LLM_TIMEOUT_SEC` | `60` | Summary generation timeout |
 
-The first start processes the most recent due window; later restarts catch up
-windows missed since the persisted cursor. Window start is inclusive and end is
-exclusive. Only saved dialogue turns are reported, including saved welcome turns
-after language selection. Opening the bot without selecting a language does not
-yet create a dialogue turn.
+Old `DAILY_REVIEW_*` settings no longer apply. Reports arrive on the first scan
+after the threshold (normally 60–70 minutes after the last user message), plus
+summary/upload time.
 
 The repository's production/default branch is `master`. Its GitHub Actions
 workflow deploys on push using repository SSH secrets. It builds images, starts
@@ -219,9 +231,9 @@ docker compose build
 docker compose up -d --wait postgres
 docker compose run --rm --no-deps -w /app/migrations bot \
   alembic -c /app/migrations/alembic.ini upgrade head
-docker compose up -d
+docker compose up -d --remove-orphans
 docker compose ps
-docker compose logs --tail=50 daily-review-worker
+docker compose logs --tail=50 inactivity-review-worker
 ```
 
 Run these commands as the project owner (currently `root` on the production
@@ -231,8 +243,10 @@ That account needs write access to the project and permission to run Docker befo
 automatic deployment can work; a manual deployment as `root` does not fix those
 account permissions.
 
-The new worker requires migration `007`. Both reviews and artifact files use
-`ADMIN_TELEGRAM_CHAT_ID`; with an empty destination daily files remain queued.
+The new worker requires migration `008`. Both reviews and artifact files use
+`ADMIN_TELEGRAM_CHAT_ID`; with an empty destination reports remain queued.
+`--remove-orphans` stops/removes the obsolete daily worker after the service rename;
+its historical database table is retained.
 Do not run a second bot polling process to test reports.
 
 Run the tests locally (LLM and Telegram are mocked):

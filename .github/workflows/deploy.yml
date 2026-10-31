@@ -25,7 +25,7 @@ jobs:
             docker compose build
             docker compose up -d --wait postgres
             docker compose run --rm --no-deps -w /app/migrations bot alembic -c /app/migrations/alembic.ini upgrade head
-            docker compose up -d
+            docker compose up -d --remove-orphans
 
       - name: Notify admin via Telegram
         if: success()

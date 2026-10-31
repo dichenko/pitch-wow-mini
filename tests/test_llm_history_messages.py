@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -303,6 +304,7 @@ async def test_process_user_text_sends_history_through_common_path(monkeypatch, 
     monkeypatch.setattr(message_module, "get_current_thread_id", get_current_thread_id)
 
     message = _FakeMessage()
+    message.date = datetime(2026, 10, 31, 8, 0, tzinfo=timezone.utc)
     await message_module.process_user_text(message=message, user_text="current question")
 
     request_messages = fake_agent.calls[0]["payload"]["messages"]
@@ -321,6 +323,7 @@ async def test_process_user_text_sends_history_through_common_path(monkeypatch, 
             "assistant_response": "final response",
             "llm_provider": provider,
             "llm_model": f"{provider}-model",
+            "user_message_at": message.date,
         }
     ]
     assert message.answers == ["final response"]

@@ -2,6 +2,7 @@
 
 import logging
 from collections.abc import Sequence
+from datetime import datetime
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from sqlalchemy import select
@@ -58,6 +59,7 @@ async def save_dialogue_turn(
     assistant_response: str,
     llm_provider: str | None = None,
     llm_model: str | None = None,
+    user_message_at: datetime | None = None,
 ) -> None:
     """Persist one completed dialogue turn."""
     async with async_session_factory() as session:
@@ -70,6 +72,7 @@ async def save_dialogue_turn(
                 assistant_response=assistant_response,
                 llm_provider=llm_provider,
                 llm_model=llm_model,
+                user_message_at=user_message_at,
             )
         )
         await session.commit()
