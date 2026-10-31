@@ -224,6 +224,13 @@ docker compose ps
 docker compose logs --tail=50 daily-review-worker
 ```
 
+Run these commands as the project owner (currently `root` on the production
+server). If GitHub Actions fails with `.git/index.lock: Permission denied`, SSH
+authentication succeeded but the configured `SSH_USER` cannot write the checkout.
+That account needs write access to the project and permission to run Docker before
+automatic deployment can work; a manual deployment as `root` does not fix those
+account permissions.
+
 The new worker requires migration `007`. Both reviews and artifact files use
 `ADMIN_TELEGRAM_CHAT_ID`; with an empty destination daily files remain queued.
 Do not run a second bot polling process to test reports.
