@@ -1,0 +1,2 @@
+-r ../apps/bot/requirements.txt
+aiosqlite==0.20.0

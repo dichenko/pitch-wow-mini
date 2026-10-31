@@ -272,6 +272,36 @@ class ArtifactJob(Base):
     )
 
 
+class DailyUserReview(Base):
+    __tablename__ = "daily_user_reviews"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=generate_uuid
+    )
+    user_tg_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    window_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    window_end: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    first_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    username: Mapped[str | None] = mapped_column(Text, nullable=True)
+    transcript_markdown: Mapped[str] = mapped_column(Text, nullable=False)
+    review_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    next_attempt_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    __table_args__ = (
+        UniqueConstraint("window_end", "user_tg_id", name="uq_daily_review_window_user"),
+        Index("ix_daily_reviews_delivery", "sent_at", "next_attempt_at"),
+    )
+
+
 class CensorRun(Base):
     __tablename__ = "censor_runs"
 

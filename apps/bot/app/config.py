@@ -1,5 +1,7 @@
 """Bot service configuration."""
 
+from pydantic import Field
+
 from packages.shared.utils.settings import AppSettings
 
 
@@ -30,6 +32,14 @@ class BotSettings(AppSettings):
     artifact_worker_poll_interval_sec: int = 5
     artifact_generator_temperature: float = 0.3
     artifact_generator_max_retries: int = 3
+
+    # Daily administrator reviews (Europe/Moscow, UTC+3)
+    daily_reviews_enabled: bool = True
+    daily_review_hour: int = Field(default=23, ge=0, le=23)
+    daily_review_minute: int = Field(default=55, ge=0, le=59)
+    daily_review_poll_interval_sec: int = Field(default=30, ge=1)
+    daily_review_retry_interval_sec: int = Field(default=300, ge=1)
+    daily_review_llm_timeout_sec: int = Field(default=60, ge=1)
 
     # LLM
     text_llm_provider: str = "openai"

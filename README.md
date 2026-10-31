@@ -169,6 +169,72 @@ The only REQUIRED default tool. LLM provides only `comment`; the backend auto-at
 
 Delivers to `ADMIN_TELEGRAM_CHAT_ID` if configured, always saves to DB.
 
+The notification is followed by a Markdown transcript for the current session. A
+background artifact job receives a snapshot including the user message that
+triggered the tool, then sends its generated package to the same chat.
+
+### Daily User Reviews
+
+The `daily-review-worker` service sends one Markdown file per user at **23:55
+Europe/Moscow (UTC+3)**, covering the preceding 24 hours across all their sessions.
+This runs independently of `send_to_admin`; days with no dialogue send no files.
+Each file includes the available name, username, Telegram ID, reporting period,
+three short Russian review sentences (topic, outcome/next step, completion), and
+the full period transcript. If completion is unclear, the review says so.
+
+The review uses the text provider and model selected in the admin settings. If
+summarization fails, the file still arrives with an explicit fallback and the full
+transcript. Telegram delivery failures retry after five minutes; successful
+reports and scheduling progress are persisted in PostgreSQL, so restarting the
+worker does not normally resend files. A crash after Telegram accepts a file but
+before the database commit can still cause a duplicate.
+
+Defaults work without changes to an existing `.env`:
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `DAILY_REVIEWS_ENABLED` | `true` | Enable scheduling and delivery |
+| `DAILY_REVIEW_HOUR` | `23` | Moscow schedule hour |
+| `DAILY_REVIEW_MINUTE` | `55` | Moscow schedule minute |
+| `DAILY_REVIEW_POLL_INTERVAL_SEC` | `30` | Scheduling/delivery polling interval |
+| `DAILY_REVIEW_RETRY_INTERVAL_SEC` | `300` | Delay after a failed file upload |
+| `DAILY_REVIEW_LLM_TIMEOUT_SEC` | `60` | Summary generation timeout |
+
+The first start processes the most recent due window; later restarts catch up
+windows missed since the persisted cursor. Window start is inclusive and end is
+exclusive. Only saved dialogue turns are reported, including saved welcome turns
+after language selection. Opening the bot without selecting a language does not
+yet create a dialogue turn.
+
+The repository's production/default branch is `master`. Its GitHub Actions
+workflow deploys on push using repository SSH secrets. It builds images, starts
+PostgreSQL, applies migrations, then starts all services. To deploy manually:
+
+```bash
+cd /opt/pitch-wow-mini
+git checkout master
+git pull --ff-only origin master
+cd infra
+docker compose build
+docker compose up -d --wait postgres
+docker compose run --rm --no-deps -w /app/migrations bot \
+  alembic -c /app/migrations/alembic.ini upgrade head
+docker compose up -d
+docker compose ps
+docker compose logs --tail=50 daily-review-worker
+```
+
+The new worker requires migration `007`. Both reviews and artifact files use
+`ADMIN_TELEGRAM_CHAT_ID`; with an empty destination daily files remain queued.
+Do not run a second bot polling process to test reports.
+
+Run the tests locally (LLM and Telegram are mocked):
+
+```bash
+pip install -r tests/requirements.txt
+LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false python -m pytest -q
+```
+
 ### LangSmith Observability
 
 Optional, controlled by `LANGSMITH_TRACING`:

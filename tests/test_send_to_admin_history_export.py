@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 import importlib
 import sys
+import uuid
 from types import ModuleType
 
 import pytest
@@ -10,7 +11,7 @@ from apps.bot.app.agent.tools.send_to_admin import (
     _format_history_markdown,
     set_tool_context,
 )
-from packages.shared.models.database import DialogueHistory
+from packages.shared.models.database import AdminNotification, ArtifactJob, DialogueHistory
 
 
 def _history_record(
@@ -135,7 +136,12 @@ async def test_send_to_admin_exports_only_current_thread(monkeypatch):
             return None
 
         def add(self, notification):
+            if isinstance(notification, AdminNotification):
+                notification.id = uuid.uuid4()
             db_notifications.append(notification)
+
+        async def flush(self):
+            return None
 
         async def commit(self):
             return None
@@ -147,9 +153,11 @@ async def test_send_to_admin_exports_only_current_thread(monkeypatch):
     async def load_latest_user_thread_history(user_tg_id):
         raise AssertionError("latest thread fallback should not be used")
 
+    original_formatter = module._format_history_markdown
+
     def format_history_markdown(**kwargs):
         captured["formatted_records"] = kwargs["records"]
-        return "history markdown"
+        return original_formatter(**kwargs)
 
     fake_bot_instance = ModuleType("apps.bot.app.bot_instance")
     fake_bot_instance.bot = FakeBot()
@@ -181,7 +189,11 @@ async def test_send_to_admin_exports_only_current_thread(monkeypatch):
     assert all(record.thread_id == "183866240_2" for record in captured["formatted_records"])
     assert captured["message_chat_id"] == 123
     assert len(sent_documents) == 1
-    assert len(db_notifications) == 1
+    assert len([row for row in db_notifications if isinstance(row, AdminNotification)]) == 1
+    job = next(row for row in db_notifications if isinstance(row, ArtifactJob))
+    assert "current thread question" in job.input_dialogue_md
+    assert "current question" in job.input_dialogue_md
+    assert job.thread_id == "183866240_2"
 
 
 @pytest.mark.asyncio
@@ -252,3 +264,74 @@ async def test_send_to_admin_falls_back_to_latest_thread_when_context_has_no_thr
     assert captured["latest_user_tg_id"] == 183866240
     assert captured["formatted_records"] == latest_records
     assert all(record.thread_id == "183866240_3" for record in captured["formatted_records"])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("snapshot", ["saved history\nlast founder answer", None])
+async def test_artifact_worker_uses_snapshot_with_legacy_fallback(monkeypatch, snapshot):
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+    from apps.bot.app.workers import artifact_worker as worker
+
+    job = ArtifactJob(
+        id=uuid.uuid4(), user_tg_id=100, thread_id="100", trace_id="trace",
+        input_dialogue_md=snapshot, input_comment="ready",
+    )
+    loader = AsyncMock(return_value=[_history_record("legacy question", "legacy answer", datetime.now(timezone.utc))])
+    generate = AsyncMock(return_value=SimpleNamespace(
+        markdown="generated", prompt_version=0, provider="openai", model="test"
+    ))
+    monkeypatch.setattr(worker, "load_user_thread_history", loader)
+    monkeypatch.setattr(worker, "generate_artifacts_from_dialogue", generate)
+    monkeypatch.setattr(worker, "mark_job_success", AsyncMock())
+    monkeypatch.setattr(worker, "send_artifact_markdown_to_admin", AsyncMock())
+
+    await worker.process_job(job)
+
+    if snapshot is not None:
+        loader.assert_not_awaited()
+        assert generate.await_args.kwargs["dialogue_md"] == snapshot
+    else:
+        loader.assert_awaited_once_with(100, "100")
+        assert "legacy question" in generate.await_args.kwargs["dialogue_md"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("chat", ["", "-123"])
+async def test_snapshot_is_saved_even_without_telegram_delivery(monkeypatch, chat):
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    module = importlib.import_module("apps.bot.app.agent.tools.send_to_admin")
+    stored = []
+
+    class Session:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        def add(self, row):
+            row.id = uuid.uuid4()
+            stored.append(row)
+
+        async def flush(self):
+            pass
+
+        async def commit(self):
+            pass
+
+    fake_bot = ModuleType("apps.bot.app.bot_instance")
+    fake_bot.bot = SimpleNamespace()
+    monkeypatch.setitem(sys.modules, fake_bot.__name__, fake_bot)
+    monkeypatch.setattr(module.settings, "admin_telegram_chat_id", chat)
+    monkeypatch.setattr(module, "send_message_markdown_or_text", AsyncMock(side_effect=OSError("offline")))
+    monkeypatch.setattr(module, "async_session_factory", Session)
+    monkeypatch.setattr(module, "load_user_thread_history", AsyncMock(return_value=[]))
+    set_tool_context({"tg_id": 100}, "last-trace", "Последняя важная реплика", "100")
+
+    await module.send_to_admin.ainvoke({"comment": "handoff"})
+
+    job = next(row for row in stored if isinstance(row, ArtifactJob))
+    assert "Последняя важная реплика" in job.input_dialogue_md

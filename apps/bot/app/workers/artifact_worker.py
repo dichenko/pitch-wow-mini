@@ -155,8 +155,11 @@ async def process_job(job: ArtifactJob) -> None:
         job.thread_id,
     )
 
-    records = await load_user_thread_history(job.user_tg_id, job.thread_id)
-    dialogue_md = format_dialogue_markdown(records)
+    dialogue_md = job.input_dialogue_md
+    if dialogue_md is None:
+        # Compatibility with jobs enqueued before dialogue snapshots were added.
+        records = await load_user_thread_history(job.user_tg_id, job.thread_id)
+        dialogue_md = format_dialogue_markdown(records)
     result = await generate_artifacts_from_dialogue(
         dialogue_md=dialogue_md,
         comment=job.input_comment,

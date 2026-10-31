@@ -175,6 +175,7 @@ async def send_to_admin(comment: str) -> str:
 
     delivered = False
     delivery_error = None
+    dialogue_md = None
 
     if settings.admin_telegram_chat_id:
         try:
@@ -221,6 +222,7 @@ async def send_to_admin(comment: str) -> str:
                     current_user_message=current_user_message,
                     current_comment=comment,
                 )
+                dialogue_md = md_content
 
                 with tempfile.NamedTemporaryFile(
                     mode="w",
@@ -287,6 +289,21 @@ async def send_to_admin(comment: str) -> str:
 
     if notification_id:
         try:
+            # Freeze the input before the current turn is saved or later messages
+            # arrive. The snapshot explicitly includes the triggering message.
+            if dialogue_md is None:
+                if current_thread_id:
+                    records = await load_user_thread_history(tg_id, current_thread_id)
+                else:
+                    records = await load_latest_user_thread_history(tg_id)
+                dialogue_md = _format_history_markdown(
+                    first_name=first_name,
+                    last_name=last_name,
+                    username=username,
+                    tg_id=tg_id,
+                    records=records,
+                    current_user_message=current_user_message,
+                )
             async with async_session_factory() as session:
                 session.add(
                     ArtifactJob(
@@ -295,6 +312,7 @@ async def send_to_admin(comment: str) -> str:
                         user_tg_id=tg_id,
                         thread_id=current_thread_id or str(tg_id),
                         input_comment=comment,
+                        input_dialogue_md=dialogue_md,
                         status="pending",
                     )
                 )
