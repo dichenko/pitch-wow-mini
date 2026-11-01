@@ -38,7 +38,7 @@ class BotSettings(AppSettings):
     inactivity_review_poll_interval_sec: int = Field(default=600, ge=1)
     inactivity_timeout_minutes: int = Field(default=60, ge=1)
     inactivity_review_retry_interval_sec: int = Field(default=600, ge=1)
-    inactivity_review_llm_timeout_sec: int = Field(default=60, ge=1)
+    inactivity_review_llm_timeout_sec: int = Field(default=300, ge=1)
 
     # LLM
     text_llm_provider: str = "openai"

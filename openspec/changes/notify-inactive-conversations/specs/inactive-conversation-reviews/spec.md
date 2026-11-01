@@ -12,7 +12,15 @@ The worker SHALL check every 600 seconds by default. It SHALL enqueue a report o
 - **THEN** inactivity SHALL use the incoming message timestamp instead of the response persistence time
 
 ### Requirement: Full conversation report
-Each report SHALL include identity, available t.me/username link, first interaction time, last user message time, inactivity detection time in Moscow, a three-to-four-sentence Russian summary and all stored user history across sessions from oldest to newest. Closure SHALL be explicitly attributed to inactivity, not inferred agreement.
+Each report SHALL contain a compact identity/profile header and three sections: dialogue time (first interaction to last user message, Moscow), a three-to-four-sentence Russian summary, and full correspondence across all stored sessions from oldest to newest. Inactivity detection time SHALL remain stored in the database without a separate document section. Closure SHALL be attributed to inactivity in the Telegram caption, not inferred agreement. Summary generation and provider request timeouts SHALL default to 300 seconds.
+
+#### Scenario: Five-minute summary budget
+- **WHEN** the worker generates a summary with default configuration
+- **THEN** both the worker deadline and the provider request timeout SHALL be 300 seconds
+
+#### Scenario: Compact report
+- **WHEN** a new or previously queued report is delivered
+- **THEN** it SHALL contain dialogue time, Russian summary and correspondence as its three main sections
 
 #### Scenario: Multiple sessions and fallback
 - **WHEN** a user has old and new sessions and summarization fails
@@ -28,3 +36,14 @@ Successful reports SHALL not repeat for unchanged history. Failed files SHALL re
 #### Scenario: New message before retry
 - **WHEN** a pending report exists and the user resumes talking
 - **THEN** the stale pending report SHALL not be delivered
+
+### Requirement: Reserve summary model
+Summary generation SHALL try the configured model first and OpenAI with OPENAI_TEXT_MODEL second when initialization, generation, timeout or output validation fails. Each attempt SHALL have a 300-second deadline by default. Identical primary and fallback models SHALL not be attempted twice. The static unavailable-summary notice SHALL be used only when no candidate succeeds.
+
+#### Scenario: Primary failure
+- **WHEN** the primary summary model times out or returns an invalid result
+- **THEN** the OpenAI model SHALL receive the same transcript and Russian summary instruction
+
+#### Scenario: Both models unavailable
+- **WHEN** all summary candidates fail
+- **THEN** the full transcript SHALL still be delivered with the explicit unavailable-summary notice

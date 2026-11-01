@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+import re
 from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
 from itertools import groupby
@@ -67,7 +68,7 @@ def format_transcript(records: Sequence[DialogueHistory]) -> str:
     for record in records:
         if record.thread_id != current_thread:
             session_number += 1
-            lines.extend([f"## Сессия {session_number}", ""])
+            lines.extend([f"### Сессия {session_number}", ""])
             current_thread = record.thread_id
         when = message_time(record).astimezone(MOSCOW).strftime("%d.%m.%Y %H:%M:%S МСК")
         user_text = (
@@ -76,7 +77,7 @@ def format_transcript(records: Sequence[DialogueHistory]) -> str:
             else record.user_message
         )
         lines.extend([
-            f"### {when}", "",
+            f"#### {when}", "",
             f"**Пользователь:** {user_text}", "",
             f"**Ассистент:** {record.assistant_response}", "", "---", "",
         ])
@@ -130,49 +131,70 @@ async def enqueue_inactive_reviews(now: datetime) -> int:
 
 
 async def generate_review(transcript: str) -> str:
-    """Summarize safely; a model outage must not hide a visitor from admins."""
+    """Try the configured model, then OpenAI, before using a static notice."""
+    candidates = []
     try:
-        llm = create_llm(
-            provider=await get_llm_provider(), model=await get_llm_model(), temperature=0.2
-        )
-        response = await asyncio.wait_for(
-            llm.ainvoke([SystemMessage(content=REVIEW_PROMPT), HumanMessage(content=transcript)]),
-            timeout=settings.inactivity_review_llm_timeout_sec,
-        )
-        content = response.content
-        if isinstance(content, list):
-            content = "".join(
-                part.get("text", "") if isinstance(part, dict) else str(part)
-                for part in content
-            )
-        sentences = json.loads(content)
-        if (not isinstance(sentences, list) or len(sentences) not in (3, 4)
-                or not all(isinstance(s, str) and 0 < len(s.strip()) <= 800 for s in sentences)):
-            raise ValueError("Review must contain three or four short sentences")
-        return " ".join(s.strip() for s in sentences)
+        candidates.append((await get_llm_provider(), await get_llm_model()))
     except Exception:
-        logger.exception("Inactivity review summary unavailable; using explicit fallback")
-        return FALLBACK_REVIEW
+        logger.exception("Cannot load primary summary model; trying OpenAI fallback")
+    fallback = ("openai", settings.openai_text_model)
+    if fallback not in candidates:
+        candidates.append(fallback)
+
+    for provider, model in candidates:
+        try:
+            return await generate_review_with_model(transcript, provider, model)
+        except Exception as exc:
+            logger.warning(
+                "Summary model failed provider=%s model=%s error_type=%s",
+                provider, model, type(exc).__name__, exc_info=True,
+            )
+    logger.error("All summary models failed; using explicit unavailable-summary notice")
+    return FALLBACK_REVIEW
+
+
+async def generate_review_with_model(transcript: str, provider: str, model: str) -> str:
+    llm = create_llm(
+        provider=provider, model=model, temperature=0.2,
+        timeout=settings.inactivity_review_llm_timeout_sec,
+    )
+    response = await asyncio.wait_for(
+        llm.ainvoke([SystemMessage(content=REVIEW_PROMPT), HumanMessage(content=transcript)]),
+        timeout=settings.inactivity_review_llm_timeout_sec,
+    )
+    content = response.content
+    if isinstance(content, list):
+        content = "".join(
+            part.get("text", "") if isinstance(part, dict) else str(part)
+            for part in content
+        )
+    sentences = json.loads(content)
+    if (not isinstance(sentences, list) or len(sentences) not in (3, 4)
+            or not all(isinstance(s, str) and 0 < len(s.strip()) <= 800 for s in sentences)):
+        raise ValueError("Review must contain three or four short sentences")
+    return " ".join(s.strip() for s in sentences)
 
 
 def format_review_document(review: InactivityReview) -> str:
     name = " ".join(p for p in [review.first_name, review.last_name] if p) or "Имя неизвестно"
     username = f"@{review.username}" if review.username else "не указан"
     contact = f"https://t.me/{review.username}" if review.username else "нет публичного username"
+
     def stamp(value):
         return as_utc(value).astimezone(MOSCOW).strftime("%d.%m.%Y %H:%M:%S МСК")
+
+    # Keep snapshots created by the previous formatter nested within the history.
+    transcript = re.sub(r"(?m)^## (Сессия \d+)$", r"### \1", review.transcript_markdown)
+    transcript = re.sub(
+        r"(?m)^### (\d{2}\.\d{2}\.\d{4} \d{2}:\d{2}:\d{2} МСК)$",
+        r"#### \1", transcript,
+    )
     return (
-        f"# Разговор завершён по неактивности\n\n"
-        f"**Пользователь заходил и общался:** {name}\n\n"
-        f"**Username:** {username}\n\n**Telegram ID:** {review.user_tg_id}\n\n"
-        f"**Контакт:** {contact}\n\n"
-        f"## Хронология\n\n"
-        f"- Пользователь впервые пришёл (по сохранённой истории): {stamp(review.first_seen_at)}\n"
-        f"- Последнее сообщение пользователя: {stamp(review.last_user_message_at)}\n"
-        f"- Завершение по неактивности обнаружено: {stamp(review.completed_at)}\n\n"
-        f"**Причина:** более {settings.inactivity_timeout_minutes} минут без сообщений пользователя.\n\n"
-        f"## Краткое ревью\n\n{review.review_text}\n\n"
-        f"# Полная история общения: от старых сообщений к новым\n\n{review.transcript_markdown}\n"
+        f"# Диалог: {name}\n\n"
+        f"{username} · **Telegram ID:** {review.user_tg_id} · {contact}\n\n"
+        f"## Время диалога\n\n{stamp(review.first_seen_at)} — {stamp(review.last_user_message_at)}\n\n"
+        f"## Краткое резюме на русском языке\n\n{review.review_text}\n\n"
+        f"## История переписки\n\n{transcript}\n"
     )
 
 

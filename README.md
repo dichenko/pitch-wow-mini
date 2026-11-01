@@ -181,11 +181,11 @@ one Markdown report to `ADMIN_TELEGRAM_CHAT_ID`, independently of `send_to_admin
 The former 23:55 daily schedule is removed.
 
 Each file includes the available name, username, Telegram ID, `t.me/username`
-profile link, first stored interaction time, last user message time and closure
-detection time in **Europe/Moscow (UTC+3)**. A three-to-four-sentence Russian
-summary is followed by the **full saved history across all sessions**, oldest
-first. Closure is explicitly technical inactivity, not a claim that all questions
-were resolved. Without a username the file says no public profile link is available.
+profile link in a compact header, followed by three sections: **dialogue time**
+(first stored interaction to last user message, **Europe/Moscow, UTC+3**), a
+**three-to-four-sentence Russian summary**, and the **full correspondence across
+all sessions**, oldest first. Without a username the header says no public profile
+link is available. Closure by inactivity does not imply that all questions were resolved.
 
 New dialogue turns record incoming Telegram message time separately from the
 later persistence of the assistant response. Older records use their saved time.
@@ -193,8 +193,12 @@ Only saved turns can be exported; opening the bot before selecting a language do
 not yet create a transcript. Recent profile activity postpones closure while an
 incoming request is being processed.
 
-The summary uses the provider/model selected in the admin settings. If the model
-fails, the full file still arrives with an explicit unavailable-summary notice.
+The summary first uses the provider/model selected in the admin settings. On an
+error, timeout or invalid response, it tries OpenAI with `OPENAI_TEXT_MODEL`
+(default `gpt-4.1-mini`), using `OPENAI_API_KEY`. An identical primary/fallback
+model is attempted only once. Each attempt has a five-minute budget by default,
+so both attempts can take up to ten minutes. If both fail, the full file still
+arrives with an explicit unavailable-summary notice.
 Failed Telegram uploads retry; successful reports are persisted and do not repeat
 for unchanged history after a restart. If the user returns, the next inactivity
 period produces a new full-history report. Pending stale reports are superseded;
@@ -212,7 +216,7 @@ Defaults work without changes to an existing `.env`:
 | `INACTIVITY_REVIEW_POLL_INTERVAL_SEC` | `600` | Check every ten minutes |
 | `INACTIVITY_TIMEOUT_MINUTES` | `60` | Strictly greater than this inactivity threshold |
 | `INACTIVITY_REVIEW_RETRY_INTERVAL_SEC` | `600` | Delay after a failed upload |
-| `INACTIVITY_REVIEW_LLM_TIMEOUT_SEC` | `60` | Summary generation timeout |
+| `INACTIVITY_REVIEW_LLM_TIMEOUT_SEC` | `300` | Summary generation and provider request timeout (five minutes) |
 
 Old `DAILY_REVIEW_*` settings no longer apply. Reports arrive on the first scan
 after the threshold (normally 60–70 minutes after the last user message), plus

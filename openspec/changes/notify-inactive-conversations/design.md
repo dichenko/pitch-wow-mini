@@ -25,3 +25,17 @@ Goals: ten-minute polling, strictly greater than sixty-minute user inactivity, f
 ## Migration Plan
 
 Build images, start PostgreSQL, apply 008, then start Compose with --remove-orphans. Migration is additive and retains daily deliveries. Rollback restores the previous application images; new tables can remain to preserve state.
+
+## Follow-up: Summary timeout and compact document
+
+The summary defaults to a 300-second worker deadline and an explicit 300-second
+provider request timeout. The latter overrides Mistral's shorter 120-second default;
+other LLM call sites retain their provider defaults. Documents keep identity/profile
+in a compact header and only three sections: dialogue time, Russian summary and
+correspondence. Stored legacy transcript headings are nested during rendering.
+
+On a primary error (including initialization, timeout and invalid output), try
+OpenAI using OPENAI_TEXT_MODEL and OPENAI_API_KEY. Skip an identical fallback
+candidate. Each candidate has the same 300-second budget (up to ten minutes for
+two attempts); use a static notice only if every candidate fails. Log provider,
+model and error class without exposing the transcript or credentials.
